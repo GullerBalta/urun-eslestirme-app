@@ -17,24 +17,45 @@ w_name = 1 - w_code
 u_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükleyin", type="xml")
 u_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükleyin", type="xml")
 
-with st.expander("ℹ️ Eşleşme Seviyesi Açıklamaları"):
-    st.markdown("""
-    ### ✅ Eşleşen Kayıtlar:
-    - 🟢 %97–100 → **Mükemmel**
-    - 🟡 %90–96 → **Çok İyi**
-    - 🟠 %80–89 → **İyi**
-    - 🔴 %65–79 → **Zayıf**
-    - ⚫ %0–64 → **Farklı Ürün**
+# Eşleşme seviyesi ikonları
+def eslesme_seviyesi(puan):
+    if puan >= 97:
+        return "🟢 Mükemmel"
+    elif puan >= 90:
+        return "🟡 Çok İyi"
+    elif puan >= 80:
+        return "🟠 İyi"
+    elif puan >= 65:
+        return "🔴 Zayıf"
+    else:
+        return "⚫ Farklı Ürün"
 
-    ### ❌ Eşleşmeyen Kayıtlar (Eşleşmeme Oranı):
-    - 🔵 %0–20 → **Şüpheli, kontrol edilmeli**
-    - ⚪ %21–34 → **Şüpheli eşleşmeme, dikkatli kontrol**
-    - ⚫ %35–100 → **Muhtemelen farklı ürün**
+# Eşleşmeme seviyesi ikonları
+def eslesmeme_seviyesi(puan):
+    if puan <= 20:
+        return "⚪ Şüpheli eşleşmeme, dikkatli kontrol"
+    elif puan <= 34:
+        return "🔵 Şüpheli, kontrol edilmeli"
+    else:
+        return "⚫ Muhtemelen farklı ürün"
+
+# Açıklama kutusu
+with st.expander("ℹ️ Eşleşme / Eşleşmeme Seviyesi Açıklamaları"):
+    st.markdown("""
+    #### ✅ Eşleşen Veriler:
+    - 🟢 **%97–100** → Mükemmel
+    - 🟡 **%90–96** → Çok İyi
+    - 🟠 **%80–89** → İyi
+    - 🔴 **%65–79** → Zayıf
+    - ⚫ **%0–64** → Farklı Ürün
+
+    #### ❌ Eşleşmeyen Veriler:
+    - ⚪ **%0–20** → Şüpheli eşleşmeme, dikkatli kontrol
+    - 🔵 **%21–34** → Şüpheli, kontrol edilmeli
+    - ⚫ **%35–100** → Muhtemelen farklı ürün
     """)
 
-# -------------------------------
-# Yardımcı Fonksiyonlar
-# -------------------------------
+# Tedarikçi şablonları yükle
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
@@ -66,40 +87,14 @@ def extract_items(xml_file, supplier_name=None):
 
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-def eslesme_seviyesi(puan):
-    if puan >= 97:
-        return "🟢 Mükemmel"
-    elif puan >= 90:
-        return "🟡 Çok İyi"
-    elif puan >= 80:
-        return "🟠 İyi"
-    elif puan >= 65:
-        return "🔴 Zayıf"
-    else:
-        return "⚫ Farklı Ürün"
-
-def eslesmeme_seviyesi(puan):
-    if puan <= 20:
-        return "🔵 Şüpheli, kontrol edilmeli"
-    elif puan <= 34:
-        return "⚪ Şüpheli eşleşmeme, dikkatli kontrol"
-    else:
-        return "⚫ Muhtemelen farklı ürün"
-
-# -------------------------------
-# Tedarikçi Şablon Girişi
-# -------------------------------
-supplier_name = st.text_input("Tedarikçi Adı (şablon tanımlamak için)")
+supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
 
 if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
-    st.success(f"'{supplier_name}' için şablon kaydedildi.")
+    st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
-# -------------------------------
-# Ana Eşleştirme İşlemi
-# -------------------------------
 if u_order and u_invoice:
     df_siparis = extract_items(u_order).head(5000)
     df_fatura = extract_items(u_invoice, supplier_name).head(5000)
@@ -110,7 +105,7 @@ if u_order and u_invoice:
     st.subheader("🧾 Fatura Verileri (İlk 5000)")
     st.dataframe(df_fatura)
 
-    with st.spinner("🔄 Eşleştirme işlemi yapılıyor, lütfen bekleyin..."):
+    with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
         results = []
         siparis_kodlar = df_siparis["kod"].tolist()
         siparis_adlar = df_siparis["adi"].tolist()
@@ -133,7 +128,6 @@ if u_order and u_invoice:
 
             matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
             durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
-            seviye = eslesme_seviyesi(kod_score) if durum == "EŞLEŞTİ" else eslesmeme_seviyesi(100 - kod_score)
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
@@ -141,24 +135,18 @@ if u_order and u_invoice:
                 "Sipariş Kodu": matched["kod"],
                 "Sipariş Adı": matched["adi"],
                 "Eşleşme Oranı (%)": round(kod_score, 1),
-                "Eşleşmeme Oranı (%)": round(100 - kod_score, 1),
-                "Seviye": seviye,
                 "Durum": durum
             })
 
-        df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
-        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy()
-        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy()
+        df_result = pd.DataFrame(results)
+        df_result = df_result.sort_values(by="Eşleşme Oranı (%)", ascending=False)
 
-        df_eslesen = df_eslesen[[
-            "Fatura Kodu", "Fatura Adı", "Sipariş Kodu", "Sipariş Adı",
-            "Eşleşme Oranı (%)", "Seviye"
-        ]]
+        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy().reset_index(drop=True)
+        df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
 
-        df_eslesmeyen = df_eslesmeyen[[
-            "Fatura Kodu", "Fatura Adı", "Sipariş Kodu", "Sipariş Adı",
-            "Eşleşmeme Oranı (%)", "Seviye"
-        ]]
+        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy().reset_index(drop=True)
+        df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
+        df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
 
     st.success("✅ Eşleştirme tamamlandı!")
     st.subheader("✅ Eşleşen Kayıtlar")
