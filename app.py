@@ -52,20 +52,21 @@ def extract_items(xml_file, supplier_name=None):
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 supplier_name = st.text_input("Tedarikçi Adı (şablon tanımlamak için)")
+prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
+suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
+
 if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
-    prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
-    suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"'{supplier_name}' için şablon kaydedildi.")
 
 if u_order and u_invoice:
-    df_siparis = extract_items(u_order).head(500)
-    df_fatura = extract_items(u_invoice, supplier_name).head(500)
+    df_siparis = extract_items(u_order).head(5000)
+    df_fatura = extract_items(u_invoice, supplier_name).head(5000)
 
-    st.subheader("📦 Sipariş Verileri (İlk 500)")
+    st.subheader("📦 Sipariş Verileri (İlk 5000)")
     st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Verileri (İlk 500)")
+    st.subheader("🧾 Fatura Verileri (İlk 5000)")
     st.dataframe(df_fatura)
 
     with st.spinner("🔄 Eşleştirme işlemi yapılıyor, lütfen bekleyin..."):
@@ -112,18 +113,14 @@ if u_order and u_invoice:
     st.success("✅ Eşleştirme tamamlandı!")
     st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
+
     st.subheader("❌ Eşleşmeyen Kayıtlar")
     st.dataframe(df_eslesmeyen)
 
     def to_excel(df1, df2):
         out = BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
-            df1.to_excel(writer, sheet_name="Eslesen", index=False)
-            df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
-        return out.getvalue()
-
-    excel_data = to_excel(df_eslesen, df_eslesmeyen)
-    st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+            df1.to_excel(writer, sheet_name="Es
 
 
 
