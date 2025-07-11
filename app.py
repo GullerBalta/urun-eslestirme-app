@@ -52,7 +52,6 @@ def extract_items(xml_file, supplier_name=None):
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 supplier_name = st.text_input("Tedarikçi Adı (şablon tanımlamak için)")
-
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
 
@@ -61,13 +60,13 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     st.success(f"'{supplier_name}' için şablon kaydedildi.")
 
 if u_order and u_invoice:
-    df_siparis = extract_items(u_order).head(5000)
-    df_fatura = extract_items(u_invoice, supplier_name).head(5000)
+    df_siparis = extract_items(u_order).head(1000)
+    df_fatura = extract_items(u_invoice, supplier_name).head(1000)
 
-    st.subheader("📦 Sipariş Verileri (İlk 5000)")
+    st.subheader("📦 Sipariş Verileri (İlk 1000)")
     st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Verileri (İlk 5000)")
+    st.subheader("🧾 Fatura Verileri (İlk 1000)")
     st.dataframe(df_fatura)
 
     with st.spinner("🔄 Eşleştirme işlemi yapılıyor, lütfen bekleyin..."):
@@ -76,29 +75,36 @@ if u_order and u_invoice:
         siparis_adlar = df_siparis["adi"].tolist()
 
         for _, f_row in df_fatura.iterrows():
-            kod_eslesme = process.extractOne(f_row["kod"], siparis_kodlar, scorer=fuzz.ratio)
-            kod_score, name_score, idx = 0, 0, None
+            kod_score = 0
+            name_score = 0
+            combined_score = 0
+            idx = None
 
+            kod_eslesme = process.extractOne(f_row["kod"], siparis_kodlar, scorer=fuzz.ratio)
             if kod_eslesme:
                 best_kod, kod_score, idx = kod_eslesme
-
-            combined_score = kod_score
 
             if f_row["adi"]:
                 name_eslesme = process.extractOne(f_row["adi"], siparis_adlar, scorer=fuzz.partial_ratio)
                 if name_eslesme:
                     best_name, name_score, idx2 = name_eslesme
                     combined = w_code * kod_score + w_name * name_score
-                    if combined > combined_score:
+                    if combined > kod_score:
                         idx = idx2
                         combined_score = combined
+                    else:
+                        combined_score = kod_score
+                else:
+                    combined_score = kod_score
+            else:
+                combined_score = kod_score
 
             if idx is not None and combined_score >= threshold:
                 matched = df_siparis.iloc[idx]
-                status = "EŞLEŞTİ"
+                status = f"EŞLEŞTİ (%{round(combined_score, 1)})"
             else:
                 matched = {"kod": "", "adi": ""}
-                status = "EŞLEŞMEDİ"
+                status = f"EŞLEŞMEDİ (%{round(combined_score, 1)})"
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
@@ -110,11 +116,10 @@ if u_order and u_invoice:
             })
 
         df_result = pd.DataFrame(results)
-        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
-        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
+        df_eslesen = df_result[df_result["Durum"].str.startswith("EŞLEŞTİ")].reset_index(drop=True)
+        df_eslesmeyen = df_result[df_result["Durum"].str.startswith("EŞLEŞMEDİ")].reset_index(drop=True)
 
     st.success("✅ Eşleştirme tamamlandı!")
-
     st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
 
