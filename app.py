@@ -9,7 +9,10 @@ st.title("📦 XML Ürün Eşleştirme Sistemi")
 uploaded_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükle", type=["xml"])
 uploaded_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükle", type=["xml"])
 
-# ✅ Ürün kodu + ürün adı çıkaran yeni fonksiyon
+# 🎯 Benzerlik eşiği ayarı
+benzerlik_esigi = st.slider("🎯 Eşleşme İçin Minimum Benzerlik (%)", min_value=70, max_value=100, value=95)
+
+# ✅ Ürün kodu + adı çıkaran fonksiyon
 def extract_codes_and_names_from_xml(xml_file):
     from lxml import etree
     tree = etree.parse(xml_file)
@@ -31,18 +34,19 @@ def extract_codes_and_names_from_xml(xml_file):
 
     return pd.DataFrame(kayitlar)
 
-# ✅ Dosyalar yüklendiyse işleme başla
+# ✅ Dosyalar yüklendiyse
 if uploaded_order and uploaded_invoice:
     df_siparis = extract_codes_and_names_from_xml(uploaded_order)
     df_fatura = extract_codes_and_names_from_xml(uploaded_invoice)
 
-    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler")
+    st.subheader("📦 Sipariş Verisi")
     st.write(df_siparis)
 
-    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler")
+    st.subheader("🧾 Fatura Verisi")
     st.write(df_fatura)
 
-    # ✅ Eşleştirme işlemi (sadece ürün_kodu üzerinden)
+    st.write("🧪 Eşleştirme Başladı...")
+
     eslesen = []
     eslesmeyen = []
 
@@ -56,7 +60,7 @@ if uploaded_order and uploaded_invoice:
                 best_score = score
                 best_match = s_row
 
-        if best_score >= 95:
+        if best_score >= benzerlik_esigi:
             eslesen.append({
                 "fatura_kodu": f_row["urun_kodu"],
                 "fatura_adi": f_row["urun_adi"],
@@ -65,6 +69,7 @@ if uploaded_order and uploaded_invoice:
                 "benzerlik": best_score,
                 "durum": "EŞLEŞTİ"
             })
+            st.success(f"✔ EŞLEŞTİ: {f_row['urun_kodu']} ↔ {best_match['urun_kodu']} | Skor: {best_score}")
         else:
             eslesmeyen.append({
                 "fatura_kodu": f_row["urun_kodu"],
@@ -72,8 +77,9 @@ if uploaded_order and uploaded_invoice:
                 "benzerlik": best_score,
                 "durum": "EŞLEŞMEDİ"
             })
+            st.warning(f"✖ EŞLEŞMEDİ: {f_row['urun_kodu']} | Skor: {best_score}")
 
-    # ✅ Sonuçları göster
+    # ✅ Tablo Gösterimi
     st.subheader("✅ Eşleşen Kodlar")
     df_eslesen = pd.DataFrame(eslesen)
     st.dataframe(df_eslesen)
