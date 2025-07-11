@@ -147,6 +147,7 @@ if u_order and u_invoice:
         df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy().reset_index(drop=True)
         df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
         df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
+        df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
 
     st.success("✅ Eşleştirme tamamlandı!")
     st.subheader("✅ Eşleşen Kayıtlar")
