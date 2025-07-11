@@ -8,32 +8,27 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("📦 XML Ürün Eşleştirme Sistemi + Tedarikçi Öğrenme (İlk 5000 Kayıt)")
+st.title("📦 XML Ürün Eşleştirme Sistemi + Tedarikçi Öğrenme (5000 Kayıt)")
 
-# Eşik ve ağırlık ayarları
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-# Dosya yükleyiciler
 u_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükleyin", type="xml")
 u_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükleyin", type="xml")
 
-# Tedarikçi şablonlarını yükle
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-# Tedarikçi şablonu kaydet
 def save_supplier_pattern(name, pattern):
     patterns = load_supplier_patterns()
     patterns[name] = pattern
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# XML'den ürün kod ve adını çıkar
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -53,16 +48,13 @@ def extract_items(xml_file, supplier_name=None):
 
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-# Tedarikçi adı girişi
 supplier_name = st.text_input("Tedarikçi Adı (şablon tanımlamak için)")
-prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
-suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
-
 if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
+    prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
+    suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"'{supplier_name}' için şablon kaydedildi.")
 
-# XML dosyaları yüklendiyse işleme başla
 if u_order and u_invoice:
     df_siparis = extract_items(u_order).head(5000)
     df_fatura = extract_items(u_invoice, supplier_name).head(5000)
@@ -94,12 +86,8 @@ if u_order and u_invoice:
                         idx = idx2
                         kod_score = combined_score
 
-            if idx is not None and kod_score >= threshold:
-                matched = df_siparis.iloc[idx]
-                status = "EŞLEŞTİ"
-            else:
-                matched = {"kod": "", "adi": ""}
-                status = "EŞLEŞMEDİ"
+            matched = df_siparis.iloc[idx] if idx is not None and idx < len(df_siparis) else {"kod": "", "adi": ""}
+            status = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
@@ -114,14 +102,13 @@ if u_order and u_invoice:
         df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
         df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
 
-    st.success("✅ Eşleştirme tamamlandı!")
+    st.success("✅ Eşleştirme tamamlandı.")
     st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
 
     st.subheader("❌ Eşleşmeyen Kayıtlar")
     st.dataframe(df_eslesmeyen)
 
-    # Excel çıktısı
     def to_excel(df1, df2):
         out = BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
