@@ -8,12 +8,9 @@ st.title("📦 XML Ürün Eşleştirme Sistemi")
 
 uploaded_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükle", type=["xml"])
 uploaded_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükle", type=["xml"])
+esik_deger = st.slider("🎯 Eşik Benzerlik Skoru (%)", min_value=50, max_value=100, value=90)
 
-# 🎯 Benzerlik eşiği ayarı
-benzerlik_esigi = st.slider("🎯 Eşleşme İçin Minimum Benzerlik (%)", min_value=70, max_value=100, value=95)
-
-# ✅ Ürün kodu + adı çıkaran fonksiyon
-def extract_codes_and_names_from_xml(xml_file):
+def extract_codes_from_xml(xml_file):
     from lxml import etree
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -23,29 +20,24 @@ def extract_codes_and_names_from_xml(xml_file):
         if eleman.text:
             metin = eleman.text.strip()
             kodlar = re.findall(r'\b[A-Za-z0-9\-\.]{5,15}\b', metin)
-
             for kod in kodlar:
-                urun_adi = metin.replace(kod, "").strip(" -:;")
                 kayitlar.append({
                     "urun_kodu": kod,
-                    "urun_adi": urun_adi,
-                    "tam_metin": metin
+                    "urun_adi": metin  # ürün adı aynı metin içinde olabilir
                 })
+    return pd.DataFrame(kayitlar).drop_duplicates()
 
-    return pd.DataFrame(kayitlar)
-
-# ✅ Dosyalar yüklendiyse
 if uploaded_order and uploaded_invoice:
-    df_siparis = extract_codes_and_names_from_xml(uploaded_order)
-    df_fatura = extract_codes_and_names_from_xml(uploaded_invoice)
+    df_siparis = extract_codes_from_xml(uploaded_order)
+    df_fatura = extract_codes_from_xml(uploaded_invoice)
 
-    st.subheader("📦 Sipariş Verisi")
-    st.write(df_siparis)
+    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler")
+    st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Verisi")
-    st.write(df_fatura)
+    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler")
+    st.dataframe(df_fatura)
 
-    st.write("🧪 Eşleştirme Başladı...")
+    st.info("🔍 Eşleştirme Başladı...")
 
     eslesen = []
     eslesmeyen = []
@@ -53,42 +45,47 @@ if uploaded_order and uploaded_invoice:
     for _, f_row in df_fatura.iterrows():
         best_match = None
         best_score = 0
+        best_kod_skor = 0
+        best_ad_skor = 0
 
         for _, s_row in df_siparis.iterrows():
-            score = fuzz.ratio(f_row["urun_kodu"], s_row["urun_kodu"])
-            if score > best_score:
-                best_score = score
+            kod_skor = fuzz.ratio(f_row["urun_kodu"], s_row["urun_kodu"])
+            ad_skor = fuzz.ratio(f_row["urun_adi"], s_row["urun_adi"])
+            skor = 0.7 * kod_skor + 0.3 * ad_skor
+
+            if skor > best_score:
+                best_score = skor
+                best_kod_skor = kod_skor
+                best_ad_skor = ad_skor
                 best_match = s_row
 
-        if best_score >= benzerlik_esigi:
+        if best_score >= esik_deger:
             eslesen.append({
                 "fatura_kodu": f_row["urun_kodu"],
-                "fatura_adi": f_row["urun_adi"],
                 "siparis_kodu": best_match["urun_kodu"],
-                "siparis_adi": best_match["urun_adi"],
-                "benzerlik": best_score,
+                "kod_skor": best_kod_skor,
+                "ad_skor": best_ad_skor,
+                "toplam_skor": round(best_score, 2),
                 "durum": "EŞLEŞTİ"
             })
-            st.success(f"✔ EŞLEŞTİ: {f_row['urun_kodu']} ↔ {best_match['urun_kodu']} | Skor: {best_score}")
+            st.success(f"✔ EŞLEŞTİ: {f_row['urun_kodu']} ↔ {best_match['urun_kodu']} | Skor: {round(best_score, 1)}")
         else:
             eslesmeyen.append({
                 "fatura_kodu": f_row["urun_kodu"],
-                "fatura_adi": f_row["urun_adi"],
-                "benzerlik": best_score,
+                "urun_adi": f_row["urun_adi"],
+                "toplam_skor": round(best_score, 2),
                 "durum": "EŞLEŞMEDİ"
             })
-            st.warning(f"✖ EŞLEŞMEDİ: {f_row['urun_kodu']} | Skor: {best_score}")
 
-    # ✅ Tablo Gösterimi
-    st.subheader("✅ Eşleşen Kodlar")
     df_eslesen = pd.DataFrame(eslesen)
+    df_eslesmeyen = pd.DataFrame(eslesmeyen)
+
+    st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
 
-    st.subheader("❌ Eşleşmeyen Kodlar")
-    df_eslesmeyen = pd.DataFrame(eslesmeyen)
+    st.subheader("❌ Eşleşmeyen Kayıtlar")
     st.dataframe(df_eslesmeyen)
 
-    # ✅ Excel çıktısı
     def to_excel(df1, df2):
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -97,7 +94,6 @@ if uploaded_order and uploaded_invoice:
         return output.getvalue()
 
     excel_data = to_excel(df_eslesen, df_eslesmeyen)
-    st.download_button("📥 Excel Olarak İndir", excel_data, file_name="eslestirme_sonuclari.xlsx")
-
+    st.download_button("📥 Excel Olarak İnd_
 
 
