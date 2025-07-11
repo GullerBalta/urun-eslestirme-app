@@ -51,8 +51,8 @@ def extract_items(xml_file, supplier_name=None):
 
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-# Tedarikçi öğrenme alanı
 supplier_name = st.text_input("Tedarikçi Adı (şablon tanımlamak için)")
+
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
 
@@ -60,7 +60,6 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"'{supplier_name}' için şablon kaydedildi.")
 
-# Eşleştirme işlemi
 if u_order and u_invoice:
     df_siparis = extract_items(u_order).head(5000)
     df_fatura = extract_items(u_invoice, supplier_name).head(5000)
@@ -78,21 +77,21 @@ if u_order and u_invoice:
 
         for _, f_row in df_fatura.iterrows():
             kod_eslesme = process.extractOne(f_row["kod"], siparis_kodlar, scorer=fuzz.ratio)
+            kod_score, name_score, idx = 0, 0, None
+
             if kod_eslesme:
-                best_kod, raw_kod_score, idx = kod_eslesme
-            else:
-                raw_kod_score, idx = 0, None
+                best_kod, kod_score, idx = kod_eslesme
+
+            combined_score = kod_score
 
             if f_row["adi"]:
                 name_eslesme = process.extractOne(f_row["adi"], siparis_adlar, scorer=fuzz.partial_ratio)
                 if name_eslesme:
                     best_name, name_score, idx2 = name_eslesme
-                else:
-                    name_score = 0
-            else:
-                name_score = 0
-
-            combined_score = w_code * raw_kod_score + w_name * name_score
+                    combined = w_code * kod_score + w_name * name_score
+                    if combined > combined_score:
+                        idx = idx2
+                        combined_score = combined
 
             if idx is not None and combined_score >= threshold:
                 matched = df_siparis.iloc[idx]
@@ -103,8 +102,34 @@ if u_order and u_invoice:
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
-                "Fa
+                "Fatura Adı": f_row["adi"],
+                "Sipariş Kodu": matched["kod"],
+                "Sipariş Adı": matched["adi"],
+                "Eşleşme Oranı (%)": round(combined_score, 1),
+                "Durum": status
+            })
 
+        df_result = pd.DataFrame(results)
+        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
+        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
+
+    st.success("✅ Eşleştirme tamamlandı!")
+
+    st.subheader("✅ Eşleşen Kayıtlar")
+    st.dataframe(df_eslesen)
+
+    st.subheader("❌ Eşleşmeyen Kayıtlar")
+    st.dataframe(df_eslesmeyen)
+
+    def to_excel(df1, df2):
+        out = BytesIO()
+        with pd.ExcelWriter(out, engine="openpyxl") as writer:
+            df1.to_excel(writer, sheet_name="Eslesen", index=False)
+            df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
+        return out.getvalue()
+
+    excel_data = to_excel(df_eslesen, df_eslesmeyen)
+    st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
 
 
 
