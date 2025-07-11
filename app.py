@@ -26,7 +26,7 @@ def extract_codes_and_names(xml_file):
                     "urun_kodu": kod,
                     "urun_adi": metin
                 })
-        if len(kayitlar) >= 1000:  # ✅ İlk 1000 kayıttan sonra dur
+        if len(kayitlar) >= 1000:  # İlk 1000 kayıtla sınırla
             break
     return pd.DataFrame(kayitlar)
 
@@ -34,10 +34,10 @@ if uploaded_order and uploaded_invoice:
     df_siparis = extract_codes_and_names(uploaded_order)
     df_fatura = extract_codes_and_names(uploaded_invoice)
 
-    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler (İlk 1000 kayıt)")
+    st.subheader("📦 Sipariş Verisi (İlk 1000 kayıt)")
     st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler (İlk 1000 kayıt)")
+    st.subheader("🧾 Fatura Verisi (İlk 1000 kayıt)")
     st.dataframe(df_fatura)
 
     eslesen = []
@@ -56,40 +56,34 @@ if uploaded_order and uploaded_invoice:
                 best_match = s_row
 
         if best_score >= threshold:
-            st.success(f"✔ EŞLEŞTİ: {f_row['urun_kodu']} ↔ {best_match['urun_kodu']} | Skor: {best_score:.1f}")
             eslesen.append({
                 "fatura_kodu": f_row["urun_kodu"],
+                "fatura_adi": f_row["urun_adi"],
                 "siparis_kodu": best_match["urun_kodu"],
-                "benzerlik": best_score,
-                "fatura_urun_adi": f_row["urun_adi"],
-                "siparis_urun_adi": best_match["urun_adi"],
+                "siparis_adi": best_match["urun_adi"],
+                "eşleşme_oranı (%)": round(best_score, 1),
                 "durum": "EŞLEŞTİ"
             })
         else:
             eslesmeyen.append({
                 "fatura_kodu": f_row["urun_kodu"],
-                "benzerlik": best_score,
-                "fatura_urun_adi": f_row["urun_adi"],
+                "fatura_adi": f_row["urun_adi"],
+                "siparis_kodu": "",
+                "siparis_adi": "",
+                "eşleşme_oranı (%)": round(best_score, 1),
                 "durum": "EŞLEŞMEDİ"
             })
 
-    df_eslesen = pd.DataFrame(eslesen)
-    df_eslesmeyen = pd.DataFrame(eslesmeyen)
+    st.subheader("📊 Eşleştirme Sonuçları (Tablo Halinde)")
+    df_sonuc = pd.DataFrame(eslesen + eslesmeyen)
+    st.dataframe(df_sonuc)
 
-    st.subheader("✅ Eşleşen Kodlar")
-    st.dataframe(df_eslesen)
-
-    st.subheader("❌ Eşleşmeyen Kodlar")
-    st.dataframe(df_eslesmeyen)
-
-    def to_excel(df1, df2):
+    def to_excel(df):
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df1.to_excel(writer, sheet_name='Eslesen', index=False)
-            df2.to_excel(writer, sheet_name='Eslesmeyen', index=False)
+            df.to_excel(writer, sheet_name='Eslestirme', index=False)
         return output.getvalue()
 
-    excel_data = to_excel(df_eslesen, df_eslesmeyen)
+    excel_data = to_excel(df_sonuc)
     st.download_button("📥 Excel Olarak İndir", excel_data, file_name="eslestirme_sonuclari.xlsx")
-
 
