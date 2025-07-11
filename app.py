@@ -29,6 +29,11 @@ def extract_codes_from_xml(xml_file):
 if uploaded_order and uploaded_invoice:
     df_siparis = extract_codes_from_xml(uploaded_order)
     df_fatura = extract_codes_from_xml(uploaded_invoice)
+    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler")
+    st.write(df_siparis)
+
+    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler")
+    st.write(df_fatura)
 
     eslesen = []
     eslesmeyen = []
