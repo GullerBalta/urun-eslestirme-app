@@ -34,7 +34,7 @@ if uploaded_order and uploaded_invoice:
 
     st.subheader("🧾 Fatura Dosyasından Çıkan Veriler")
     st.write(df_fatura)
-        eslesen = []
+    eslesen = []
     eslesmeyen = []
 
     for _, f_row in df_fatura.iterrows():
