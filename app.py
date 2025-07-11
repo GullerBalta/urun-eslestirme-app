@@ -84,19 +84,27 @@ if u_order and u_invoice:
             })
 
         df_result = pd.DataFrame(results)
+        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
+        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
 
     st.success("✅ Eşleştirme tamamlandı!")
-    st.subheader("📊 Eşleştirme Sonuçları")
-    st.dataframe(df_result)
 
-    def to_excel(df):
+    st.subheader("✅ Eşleşen Kayıtlar")
+    st.dataframe(df_eslesen)
+
+    st.subheader("❌ Eşleşmeyen Kayıtlar")
+    st.dataframe(df_eslesmeyen)
+
+    def to_excel(eslesen, eslesmeyen):
         out = BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
+            eslesen.to_excel(writer, index=False, sheet_name="Eslesen")
+            eslesmeyen.to_excel(writer, index=False, sheet_name="Eslesmeyen")
         return out.getvalue()
 
-    excel_data = to_excel(df_result)
+    excel_data = to_excel(df_eslesen, df_eslesmeyen)
     st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+
 
 
 
