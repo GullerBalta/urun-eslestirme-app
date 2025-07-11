@@ -3,4 +3,4 @@ pandas
 lxml
 rapidfuzz
 openpyxl
-rapidfuzz
+
