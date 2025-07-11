@@ -26,16 +26,18 @@ def extract_codes_and_names(xml_file):
                     "urun_kodu": kod,
                     "urun_adi": metin
                 })
+        if len(kayitlar) >= 1000:  # ✅ İlk 1000 kayıttan sonra dur
+            break
     return pd.DataFrame(kayitlar)
 
 if uploaded_order and uploaded_invoice:
     df_siparis = extract_codes_and_names(uploaded_order)
     df_fatura = extract_codes_and_names(uploaded_invoice)
 
-    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler")
+    st.subheader("📦 Sipariş Dosyasından Çıkan Veriler (İlk 1000 kayıt)")
     st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler")
+    st.subheader("🧾 Fatura Dosyasından Çıkan Veriler (İlk 1000 kayıt)")
     st.dataframe(df_fatura)
 
     eslesen = []
