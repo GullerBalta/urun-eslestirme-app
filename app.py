@@ -116,25 +116,28 @@ if u_order and u_invoice:
             })
 
         df_result = pd.DataFrame(results)
-        df_eslesen = df_result[df_result["Durum"].str.startswith("EŞLEŞTİ")].reset_index(drop=True)
-        df_eslesmeyen = df_result[df_result["Durum"].str.startswith("EŞLEŞMEDİ")].reset_index(drop=True)
+
+        # ✅ Sıralama eklendi
+        df_eslesen = df_result[df_result["Durum"].str.startswith("EŞLEŞTİ")].sort_values(
+            by="Eşleşme Oranı (%)", ascending=False).reset_index(drop=True)
+
+        df_eslesmeyen = df_result[df_result["Durum"].str.startswith("EŞLEŞMEDİ")].sort_values(
+            by="Eşleşme Oranı (%)", ascending=False).reset_index(drop=True)
 
     st.success("✅ Eşleştirme tamamlandı!")
-    st.subheader("✅ Eşleşen Kayıtlar")
+
+    st.subheader("✅ Eşleşen Kayıtlar (Yüksekten Düşüğe Sıralı)")
     st.dataframe(df_eslesen)
 
-    st.subheader("❌ Eşleşmeyen Kayıtlar")
+    st.subheader("❌ Eşleşmeyen Kayıtlar (Yüksekten Düşüğe Sıralı)")
     st.dataframe(df_eslesmeyen)
 
     def to_excel(df1, df2):
         out = BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             df1.to_excel(writer, sheet_name="Eslesen", index=False)
-            df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
-        return out.getvalue()
+            df2.to_exce_
 
-    excel_data = to_excel(df_eslesen, df_eslesmeyen)
-    st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
 
 
 
