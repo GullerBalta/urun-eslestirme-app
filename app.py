@@ -8,17 +8,16 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("\U0001F4E6 XML Ürün Eşleştirme Sistemi + Tedarikçi Öğrenme")
+st.title("📦 XML Ürün Eşleştirme Sistemi + Tedarikçi Öğrenme")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-u_order = st.file_uploader("📄 Sipariş XML Dosyasını Yükleyin", type="xml")
-u_invoice = st.file_uploader("📄 Fatura XML Dosyasını Yükleyin", type="xml")
+u_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükleyin", type="xml")
+u_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükleyin", type="xml")
 
-# Eşleşen tablo seviyeleri
-
+# Eşleşme seviyesini etiketle (EŞLEŞEN için)
 def eslesme_seviyesi(puan):
     if puan >= 97:
         return "🟢 Mükemmel"
@@ -31,46 +30,43 @@ def eslesme_seviyesi(puan):
     else:
         return "⚫ Farklı Ürün"
 
-# Eşleşmeyen tablo seviyeleri
-
-def farklilik_seviyesi(fark):
-    if fark <= 20:
+# Eşleşmeme seviyesi etiketi (EŞLEŞMEYEN için - ters mantık)
+def eslesmeme_seviyesi(puan):
+    if puan <= 20:
         return "🟢 Çok Benzer"
-    elif fark <= 50:
+    elif puan <= 50:
         return "🟡 Benzer"
     else:
         return "⚫ Farklı"
 
-# Açıklama kutusu
 with st.expander("ℹ️ Eşleşme Seviyesi Açıklamaları"):
     st.markdown("""
-    - 🟢 **%97–100** → Mükemmel
-    - 🟡 **%90–96** → Çok İyi
-    - 🟠 **%80–89** → İyi
-    - 🔴 **%65–79** → Zayıf
-    - ⚫ **%0–64** → Farklı Ürün
-    
-    **Eşleşmeyenler için:**
-    - 🟢 **%0–20 fark** → Çok Benzer (kontrol et)
-    - 🟡 **%21–50 fark** → Benzer (gözden geçir)
-    - ⚫ **%51–100 fark** → Muhtemelen farklı Ürün
+    - 🟢 **%97–100** → Mükemmel: Kod ve ürün adı birebir ya da çok yakın.
+    - 🟡 **%90–96** → Çok İyi: Ufak farklar var ama büyük ihtimalle aynı ürün.
+    - 🟠 **%80–89** → İyi: Kod veya ad kısmen benzer, kontrol önerilir.
+    - 🔴 **%65–79** → Zayıf: Eşleşme şüpheli, manuel kontrol önerilir.
+    - ⚫ **%0–64** → Farklı Ürün: Çok düşük benzerlik, farklı ürün olması muhtemel.
     """)
 
-# Tedarikçi şablonları
+with st.expander("ℹ️ Eşleşmeme Açıklamaları"):
+    st.markdown("""
+    - 🟢 **%0–20** → Çok Benzer: Kodlar benzer olabilir.
+    - 🟡 **%21–50** → Benzer: Bazı benzerlikler taşıyor.
+    - ⚫ **%51–100** → Farklı: Büyük ihtimalle tamamen farklı ürün.
+    """)
 
+# Tedarikçi şablonları yükle
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-
 def save_supplier_pattern(name, pattern):
     patterns = load_supplier_patterns()
     patterns[name] = pattern
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
-
 
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
@@ -103,13 +99,13 @@ if u_order and u_invoice:
     df_siparis = extract_items(u_order).head(5000)
     df_fatura = extract_items(u_invoice, supplier_name).head(5000)
 
-    st.subheader("📦 Sipariş Verileri (5000'e kadar)")
+    st.subheader("📦 Sipariş Verileri (İlk 5000)")
     st.dataframe(df_siparis)
 
-    st.subheader("📅 Fatura Verileri (5000'e kadar)")
+    st.subheader("🧾 Fatura Verileri (İlk 5000)")
     st.dataframe(df_fatura)
 
-    with st.spinner("🔄 Eşleştiriliyor..."):
+    with st.spinner("🔄 Eşleştirme işlemi yapılıyor, lütfen bekleyin..."):
         results = []
         siparis_kodlar = df_siparis["kod"].tolist()
         siparis_adlar = df_siparis["adi"].tolist()
@@ -132,9 +128,6 @@ if u_order and u_invoice:
 
             matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
             durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
-            seviye = eslesme_seviyesi(kod_score)
-            fark_orani = 100 - kod_score
-            fark_seviye = farklilik_seviyesi(fark_orani)
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
@@ -142,8 +135,7 @@ if u_order and u_invoice:
                 "Sipariş Kodu": matched["kod"],
                 "Sipariş Adı": matched["adi"],
                 "Eşleşme Oranı (%)": round(kod_score, 1),
-                "Eşleşme Seviyesi": seviye,
-                "Farklılık Seviyesi": fark_seviye,
+                "Seviye": eslesme_seviyesi(kod_score) if durum == "EŞLEŞTİ" else eslesmeme_seviyesi(100 - kod_score),
                 "Durum": durum
             })
 
@@ -153,10 +145,10 @@ if u_order and u_invoice:
         df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
 
     st.success("✅ Eşleştirme tamamlandı!")
-    st.subheader("✅ Eşleşen Kısımlar")
+    st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
 
-    st.subheader("❌ Eşleşmeyen Kısımlar")
+    st.subheader("❌ Eşleşmeyen Kayıtlar")
     st.dataframe(df_eslesmeyen)
 
     def to_excel(df1, df2):
