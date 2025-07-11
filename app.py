@@ -6,11 +6,11 @@ from io import BytesIO
 from lxml import etree
 
 st.set_page_config(page_title="XML Ürün Eşleştirme", layout="wide")
-st.title("📦 XML Ürün Eşleştirme Sistemi")
+st.title("📦 XML Ürün Eşleştirme Sistemi (%80 Kod + %20 Ad Eşleştirme)")
 
 uploaded_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükle", type=["xml"])
 uploaded_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükle", type=["xml"])
-threshold = st.slider("🔍 Benzerlik Eşik Değeri (%)", 80, 100, 95)
+threshold = st.slider("🔍 Benzerlik Eşik Değeri (Karma Skor %)", 70, 100, 90)
 
 def extract_codes_and_names(xml_file):
     tree = etree.parse(xml_file)
@@ -50,9 +50,12 @@ if uploaded_order and uploaded_invoice:
         best_score = 0
 
         for _, s_row in df_siparis.iterrows():
-            score = fuzz.ratio(str(f_row["urun_kodu"]), str(s_row["urun_kodu"]))
-            if score > best_score:
-                best_score = score
+            score_kod = fuzz.ratio(str(f_row["urun_kodu"]), str(s_row["urun_kodu"]))
+            score_ad = fuzz.ratio(str(f_row["urun_adi"]), str(s_row["urun_adi"]))
+            combined_score = 0.8 * score_kod + 0.2 * score_ad
+
+            if combined_score > best_score:
+                best_score = combined_score
                 best_match = s_row
 
         if best_score >= threshold:
@@ -74,7 +77,7 @@ if uploaded_order and uploaded_invoice:
                 "durum": "EŞLEŞMEDİ"
             })
 
-    st.subheader("📊 Eşleştirme Sonuçları (Tablo Halinde)")
+    st.subheader("📊 Eşleştirme Sonuçları (Kod + Ad ile)")
     df_sonuc = pd.DataFrame(eslesen + eslesmeyen)
     st.dataframe(df_sonuc)
 
@@ -86,4 +89,5 @@ if uploaded_order and uploaded_invoice:
 
     excel_data = to_excel(df_sonuc)
     st.download_button("📥 Excel Olarak İndir", excel_data, file_name="eslestirme_sonuclari.xlsx")
+
 
