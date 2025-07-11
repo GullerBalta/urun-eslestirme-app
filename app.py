@@ -17,21 +17,42 @@ w_name = 1 - w_code
 u_order = st.file_uploader("📤 Sipariş XML Dosyasını Yükleyin", type="xml")
 u_invoice = st.file_uploader("📤 Fatura XML Dosyasını Yükleyin", type="xml")
 
-# Tedarikçi şablonlarının yüklenmesi
+# Eşleşme seviyesini etiketle
+def eslesme_seviyesi(puan):
+    if puan >= 97:
+        return "🟢 Mükemmel"
+    elif puan >= 90:
+        return "🟡 Çok İyi"
+    elif puan >= 80:
+        return "🟠 İyi"
+    elif puan >= 65:
+        return "🔴 Zayıf"
+    else:
+        return "⚫ Farklı Ürün Olabilir"
+
+# Açıklama kutusu
+with st.expander("ℹ️ Eşleşme Seviyesi Açıklamaları"):
+    st.markdown("""
+    - 🟢 **%97–100** → Mükemmel: Kod ve ürün adı birebir ya da çok yakın.
+    - 🟡 **%90–96** → Çok İyi: Ufak farklar var ama büyük ihtimalle aynı ürün.
+    - 🟠 **%80–89** → İyi: Kod veya ad kısmen benzer, kontrol önerilir.
+    - 🔴 **%65–79** → Zayıf: Eşleşme şüpheli, manuel kontrol önerilir.
+    - ⚫ **%0–64** → Farklı Ürün Olabilir: Çok düşük benzerlik, farklı ürün olması muhtemel.
+    """)
+
+# Tedarikçi şablonları yükle
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-# Tedarikçi şablonlarının kaydedilmesi
 def save_supplier_pattern(name, pattern):
     patterns = load_supplier_patterns()
     patterns[name] = pattern
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# XML verisini parçala
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -75,12 +96,9 @@ if u_order and u_invoice:
         siparis_adlar = df_siparis["adi"].tolist()
 
         for _, f_row in df_fatura.iterrows():
-            kod_score = 0
-            name_score = 0
-            combined_score = 0
-            idx = None
-
             kod_eslesme = process.extractOne(f_row["kod"], siparis_kodlar, scorer=fuzz.ratio)
+            kod_score, name_score, idx = 0, 0, None
+
             if kod_eslesme:
                 best_kod, kod_score, idx = kod_eslesme
 
@@ -88,56 +106,46 @@ if u_order and u_invoice:
                 name_eslesme = process.extractOne(f_row["adi"], siparis_adlar, scorer=fuzz.partial_ratio)
                 if name_eslesme:
                     best_name, name_score, idx2 = name_eslesme
-                    combined = w_code * kod_score + w_name * name_score
-                    if combined > kod_score:
+                    combined_score = w_code * kod_score + w_name * name_score
+                    if combined_score > kod_score:
                         idx = idx2
-                        combined_score = combined
-                    else:
-                        combined_score = kod_score
-                else:
-                    combined_score = kod_score
-            else:
-                combined_score = kod_score
+                        kod_score = combined_score
 
-            if idx is not None and combined_score >= threshold:
-                matched = df_siparis.iloc[idx]
-                status = f"EŞLEŞTİ (%{round(combined_score, 1)})"
-            else:
-                matched = {"kod": "", "adi": ""}
-                status = f"EŞLEŞMEDİ (%{round(combined_score, 1)})"
+            matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
+            durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
+            seviye = eslesme_seviyesi(kod_score)
 
             results.append({
                 "Fatura Kodu": f_row["kod"],
                 "Fatura Adı": f_row["adi"],
                 "Sipariş Kodu": matched["kod"],
                 "Sipariş Adı": matched["adi"],
-                "Eşleşme Oranı (%)": round(combined_score, 1),
-                "Durum": status
+                "Eşleşme Oranı (%)": round(kod_score, 1),
+                "Seviye": seviye,
+                "Durum": durum
             })
 
         df_result = pd.DataFrame(results)
-
-        # ✅ Sıralama eklendi
-        df_eslesen = df_result[df_result["Durum"].str.startswith("EŞLEŞTİ")].sort_values(
-            by="Eşleşme Oranı (%)", ascending=False).reset_index(drop=True)
-
-        df_eslesmeyen = df_result[df_result["Durum"].str.startswith("EŞLEŞMEDİ")].sort_values(
-            by="Eşleşme Oranı (%)", ascending=False).reset_index(drop=True)
+        df_result = df_result.sort_values(by="Eşleşme Oranı (%)", ascending=False)
+        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
+        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
 
     st.success("✅ Eşleştirme tamamlandı!")
-
-    st.subheader("✅ Eşleşen Kayıtlar (Yüksekten Düşüğe Sıralı)")
+    st.subheader("✅ Eşleşen Kayıtlar")
     st.dataframe(df_eslesen)
 
-    st.subheader("❌ Eşleşmeyen Kayıtlar (Yüksekten Düşüğe Sıralı)")
+    st.subheader("❌ Eşleşmeyen Kayıtlar")
     st.dataframe(df_eslesmeyen)
 
     def to_excel(df1, df2):
         out = BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             df1.to_excel(writer, sheet_name="Eslesen", index=False)
-            df2.to_exce_
+            df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
+        return out.getvalue()
 
+    excel_data = to_excel(df_eslesen, df_eslesmeyen)
+    st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
 
 
 
