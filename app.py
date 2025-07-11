@@ -81,13 +81,13 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     st.success(f"'{supplier_name}' için şablon kaydedildi.")
 
 if u_order and u_invoice:
-    df_siparis = extract_items(u_order).head(1000)
-    df_fatura = extract_items(u_invoice, supplier_name).head(1000)
+    df_siparis = extract_items(u_order).head(5000)
+    df_fatura = extract_items(u_invoice, supplier_name).head(5000)
 
-    st.subheader("📦 Sipariş Verileri (İlk 1000)")
+    st.subheader("📦 Sipariş Verileri (İlk 5000)")
     st.dataframe(df_siparis)
 
-    st.subheader("🧾 Fatura Verileri (İlk 1000)")
+    st.subheader("🧾 Fatura Verileri (İlk 5000)")
     st.dataframe(df_fatura)
 
     with st.spinner("🔄 Eşleştirme işlemi yapılıyor, lütfen bekleyin..."):
@@ -146,6 +146,5 @@ if u_order and u_invoice:
 
     excel_data = to_excel(df_eslesen, df_eslesmeyen)
     st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
-
 
 
