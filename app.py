@@ -8,7 +8,7 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("📦 Akıllı Kod + Ürün Adı Normalize Edilmiş XML Ürün Eşleştirme Sistemi")
+st.title("📦  Akıllı Sipariş I Fatura Karşılaştırma Ve Tedarikçi Ekleme Sistemi")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
