@@ -14,6 +14,7 @@ threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
+# ✅ Hatalı satır burasıydı – düzeltildi
 u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
@@ -43,7 +44,7 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# ✅ Kodları karşılaştırmadan önce normalize et
+# ✅ Kod normalize: harf ve rakam dışındaki karakterleri temizler
 def normalize_code(code):
     return re.sub(r'[^A-Za-z0-9]', '', str(code))
 
@@ -157,7 +158,37 @@ if u_order and u_invoice:
                 results.append({
                     "Fatura Kodu": f_row["kod"],
                     "Fatura Adı": f_row["adi"],
-                    "Sip
+                    "Sipariş Kodu": matched["kod"],
+                    "Sipariş Adı": matched["adi"],
+                    "Eşleşme Oranı (%)": round(kod_score, 1),
+                    "Durum": durum
+                })
 
+            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+
+            df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy().reset_index(drop=True)
+            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
+
+            df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy().reset_index(drop=True)
+            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
+            df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
+            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
+
+        st.success("✅ Eşleştirme tamamlandı!")
+        st.subheader("✅ Eşleşen Kayıtlar")
+        st.dataframe(df_eslesen)
+
+        st.subheader("❌ Eşleşmeyen Kayıtlar")
+        st.dataframe(df_eslesmeyen)
+
+        def to_excel(df1, df2):
+            out = BytesIO()
+            with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                df1.to_excel(writer, sheet_name="Eslesen", index=False)
+                df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
+            return out.getvalue()
+
+        excel_data = to_excel(df_eslesen, df_eslesmeyen)
+        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
 
 
