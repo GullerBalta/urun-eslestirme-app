@@ -14,7 +14,6 @@ threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-# ✅ Genişletilmiş dosya uzantı tipi
 u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
@@ -53,7 +52,14 @@ with st.expander("ℹ️ Eşleşme / Eşleşmeme Seviyesi Açıklamaları"):
     - ⚫ **%35–100** → Muhtemelen farklı ürün
     """)
 
-# ✅ CSV/XLSX gibi dosyaları XML'e dönüştür
+# ✅ XML etiketi olarak geçerli bir isim üret
+def clean_column_name(name):
+    name = name.strip()
+    name = re.sub(r'\s+', '_', name)            # boşluk → _
+    name = re.sub(r'[^\w\-\.]', '', name)       # Türkçe ve özel karakterleri sil
+    return name
+
+# ✅ CSV / Excel dosyalarını XML'e dönüştür
 def convert_to_xml(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1].lower()
 
@@ -68,11 +74,13 @@ def convert_to_xml(uploaded_file):
             st.error("❌ Desteklenmeyen dosya türü.")
             return None
 
+        df.columns = [clean_column_name(col) for col in df.columns]
+
         root = etree.Element("Data")
         for _, row in df.iterrows():
             item_elem = etree.SubElement(root, "Item")
             for col, val in row.items():
-                col_elem = etree.SubElement(item_elem, str(col))
+                col_elem = etree.SubElement(item_elem, col)
                 col_elem.text = str(val)
 
         xml_bytes = BytesIO()
@@ -123,7 +131,6 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
-# ✅ Dönüştürüp eşleştirme yap
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
@@ -197,7 +204,6 @@ if u_order and u_invoice:
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
-
 
 
 
