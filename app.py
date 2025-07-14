@@ -14,10 +14,10 @@ threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin (XML, CSV, XLSX, TXT)", type=["xml", "csv", "xls", "xlsx", "txt"])
-u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin (XML, CSV, XLSX, TXT)", type=["xml", "csv", "xls", "xlsx", "txt"])
+# ✅ Genişletilmiş dosya uzantı tipi
+u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
-# Eşleşme seviyesi ikonları
 def eslesme_seviyesi(puan):
     if puan >= 97:
         return "🟢 Mükemmel"
@@ -30,7 +30,6 @@ def eslesme_seviyesi(puan):
     else:
         return "⚫ Farklı Ürün"
 
-# Eşleşmeme seviyesi ikonları
 def eslesmeme_seviyesi(puan):
     if puan <= 20:
         return "⚪ Şüpheli eşleşmeme, dikkatli kontrol"
@@ -54,29 +53,26 @@ with st.expander("ℹ️ Eşleşme / Eşleşmeme Seviyesi Açıklamaları"):
     - ⚫ **%35–100** → Muhtemelen farklı ürün
     """)
 
-# 🔁 Her türden dosyayı XML'e dönüştür
+# ✅ CSV/XLSX gibi dosyaları XML'e dönüştür
 def convert_to_xml(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1].lower()
 
     try:
-        if file_type in ["xml"]:
+        if file_type == "xml":
             return uploaded_file
-
         elif file_type in ["csv", "txt"]:
             df = pd.read_csv(uploaded_file)
-
         elif file_type in ["xls", "xlsx"]:
             df = pd.read_excel(uploaded_file)
-
         else:
-            st.error("❌ Bu dosya tipi desteklenmiyor.")
+            st.error("❌ Desteklenmeyen dosya türü.")
             return None
 
         root = etree.Element("Data")
         for _, row in df.iterrows():
             item_elem = etree.SubElement(root, "Item")
             for col, val in row.items():
-                col_elem = etree.SubElement(item_elem, col)
+                col_elem = etree.SubElement(item_elem, str(col))
                 col_elem.text = str(val)
 
         xml_bytes = BytesIO()
@@ -85,10 +81,9 @@ def convert_to_xml(uploaded_file):
         xml_bytes.seek(0)
         return xml_bytes
     except Exception as e:
-        st.error(f"❌ Dönüştürme hatası: {str(e)}")
+        st.error(f"❌ XML'e dönüştürme hatası: {str(e)}")
         return None
 
-# Tedarikçi şablonları
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
@@ -101,7 +96,6 @@ def save_supplier_pattern(name, pattern):
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# XML veriden ürünleri çıkar
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -121,7 +115,6 @@ def extract_items(xml_file, supplier_name=None):
 
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-# Tedarikçi şablonu alanı
 supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
@@ -130,7 +123,7 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
-# ✅ Eşleştirme işlemi
+# ✅ Dönüştürüp eşleştirme yap
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
