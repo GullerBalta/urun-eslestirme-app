@@ -8,13 +8,12 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("📦 Akıllı Kod Normalize + XML Ürün Eşleştirme Sistemi")
+st.title("📦 Akıllı Kod + Ürün Adı Normalize Edilmiş XML Ürün Eşleştirme Sistemi")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-# ✅ Hatalı satır burasıydı – düzeltildi
 u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
@@ -44,9 +43,16 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# ✅ Kod normalize: harf ve rakam dışındaki karakterleri temizler
+# ✅ Kodları normalize et (noktalama ve boşlukları kaldır)
 def normalize_code(code):
     return re.sub(r'[^A-Za-z0-9]', '', str(code))
+
+# ✅ Ürün adlarını normalize et (küçük harf, noktalama temizleme, boşluk sadeleştirme)
+def normalize_name(name):
+    name = str(name).lower()
+    name = re.sub(r'[^\w\s]', '', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
 
 def convert_to_xml(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1].lower()
@@ -132,8 +138,10 @@ if u_order and u_invoice:
         with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
-            normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
             siparis_adlar = df_siparis["adi"].tolist()
+
+            normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
+            normalized_siparis_adlar = [normalize_name(ad) for ad in siparis_adlar]
 
             for _, f_row in df_fatura.iterrows():
                 f_kod_norm = normalize_code(f_row["kod"])
@@ -144,7 +152,8 @@ if u_order and u_invoice:
                     _, kod_score, idx = kod_eslesme
 
                 if f_row["adi"]:
-                    name_eslesme = process.extractOne(f_row["adi"], siparis_adlar, scorer=fuzz.partial_ratio)
+                    f_name_norm = normalize_name(f_row["adi"])
+                    name_eslesme = process.extractOne(f_name_norm, normalized_siparis_adlar, scorer=fuzz.partial_ratio)
                     if name_eslesme:
                         _, name_score, idx2 = name_eslesme
                         combined_score = w_code * kod_score + w_name * name_score
@@ -190,5 +199,6 @@ if u_order and u_invoice:
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+
 
 
