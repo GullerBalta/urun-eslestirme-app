@@ -8,7 +8,7 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("📦  Akıllı Sipariş I Fatura Karşılaştırma Ve Tedarikçi Ekleme Sistemi")
+st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
@@ -43,11 +43,9 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# ✅ Kodları normalize et (noktalama ve boşlukları kaldır)
 def normalize_code(code):
     return re.sub(r'[^A-Za-z0-9]', '', str(code))
 
-# ✅ Ürün adlarını normalize et (küçük harf, noktalama temizleme, boşluk sadeleştirme)
 def normalize_name(name):
     name = str(name).lower()
     name = re.sub(r'[^\w\s]', '', name)
