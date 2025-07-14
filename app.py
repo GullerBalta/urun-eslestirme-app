@@ -8,7 +8,7 @@ import json
 import os
 
 st.set_page_config(layout="wide")
-st.title("📦 Dosya Dönüşümlü XML Ürün Eşleştirme Sistemi + Tedarikçi Öğrenme")
+st.title("📦 Akıllı Kod Normalize + XML Ürün Eşleştirme Sistemi")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
@@ -37,32 +37,18 @@ def eslesmeme_seviyesi(puan):
     else:
         return "⚫ Muhtemelen farklı ürün"
 
-with st.expander("ℹ️ Eşleşme / Eşleşmeme Seviyesi Açıklamaları"):
-    st.markdown("""
-    #### ✅ Eşleşen Veriler:
-    - 🟢 **%97–100** → Mükemmel
-    - 🟡 **%90–96** → Çok İyi
-    - 🟠 **%80–89** → İyi
-    - 🔴 **%65–79** → Zayıf
-    - ⚫ **%0–64** → Farklı Ürün
-
-    #### ❌ Eşleşmeyen Veriler:
-    - ⚪ **%0–20** → Şüpheli eşleşmeme, dikkatli kontrol
-    - 🔵 **%21–34** → Şüpheli, kontrol edilmeli
-    - ⚫ **%35–100** → Muhtemelen farklı ürün
-    """)
-
-# ✅ XML etiketi olarak geçerli bir isim üret
 def clean_column_name(name):
     name = name.strip()
-    name = re.sub(r'\s+', '_', name)            # boşluk → _
-    name = re.sub(r'[^\w\-\.]', '', name)       # Türkçe ve özel karakterleri sil
+    name = re.sub(r'\s+', '_', name)
+    name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# ✅ CSV / Excel dosyalarını XML'e dönüştür
+# ✅ Kodları karşılaştırmadan önce normalize et
+def normalize_code(code):
+    return re.sub(r'[^A-Za-z0-9]', '', str(code))
+
 def convert_to_xml(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1].lower()
-
     try:
         if file_type == "xml":
             return uploaded_file
@@ -75,14 +61,12 @@ def convert_to_xml(uploaded_file):
             return None
 
         df.columns = [clean_column_name(col) for col in df.columns]
-
         root = etree.Element("Data")
         for _, row in df.iterrows():
             item_elem = etree.SubElement(root, "Item")
             for col, val in row.items():
                 col_elem = etree.SubElement(item_elem, col)
                 col_elem.text = str(val)
-
         xml_bytes = BytesIO()
         tree = etree.ElementTree(root)
         tree.write(xml_bytes, encoding='utf-8', xml_declaration=True)
@@ -120,7 +104,6 @@ def extract_items(xml_file, supplier_name=None):
                     kod = re.sub(supplier_pattern.get("remove_prefix", "^$"), "", kod)
                     kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
                 records.append({"kod": kod, "adi": adi})
-
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
@@ -148,19 +131,21 @@ if u_order and u_invoice:
         with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
+            normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
             siparis_adlar = df_siparis["adi"].tolist()
 
             for _, f_row in df_fatura.iterrows():
-                kod_eslesme = process.extractOne(f_row["kod"], siparis_kodlar, scorer=fuzz.ratio)
+                f_kod_norm = normalize_code(f_row["kod"])
+                kod_eslesme = process.extractOne(f_kod_norm, normalized_siparis_kodlar, scorer=fuzz.ratio)
                 kod_score, name_score, idx = 0, 0, None
 
                 if kod_eslesme:
-                    best_kod, kod_score, idx = kod_eslesme
+                    _, kod_score, idx = kod_eslesme
 
                 if f_row["adi"]:
                     name_eslesme = process.extractOne(f_row["adi"], siparis_adlar, scorer=fuzz.partial_ratio)
                     if name_eslesme:
-                        best_name, name_score, idx2 = name_eslesme
+                        _, name_score, idx2 = name_eslesme
                         combined_score = w_code * kod_score + w_name * name_score
                         if combined_score > kod_score:
                             idx = idx2
@@ -172,38 +157,7 @@ if u_order and u_invoice:
                 results.append({
                     "Fatura Kodu": f_row["kod"],
                     "Fatura Adı": f_row["adi"],
-                    "Sipariş Kodu": matched["kod"],
-                    "Sipariş Adı": matched["adi"],
-                    "Eşleşme Oranı (%)": round(kod_score, 1),
-                    "Durum": durum
-                })
-
-            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
-
-            df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy().reset_index(drop=True)
-            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
-
-            df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy().reset_index(drop=True)
-            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
-            df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
-            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
-
-        st.success("✅ Eşleştirme tamamlandı!")
-        st.subheader("✅ Eşleşen Kayıtlar")
-        st.dataframe(df_eslesen)
-
-        st.subheader("❌ Eşleşmeyen Kayıtlar")
-        st.dataframe(df_eslesmeyen)
-
-        def to_excel(df1, df2):
-            out = BytesIO()
-            with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                df1.to_excel(writer, sheet_name="Eslesen", index=False)
-                df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
-            return out.getvalue()
-
-        excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+                    "Sip
 
 
 
