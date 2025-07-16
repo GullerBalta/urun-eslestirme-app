@@ -52,6 +52,22 @@ def normalize_name(name):
     name = re.sub(r'\s+', ' ', name).strip()
     return name
 
+def load_learned_matches():
+    if os.path.exists("learned_matches.json"):
+        with open("learned_matches.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_learned_match(fatura_kodu, siparis_kodu, fatura_adi, siparis_adi):
+    matches = load_learned_matches()
+    matches[fatura_kodu] = {
+        "siparis_kodu": siparis_kodu,
+        "fatura_adi": fatura_adi,
+        "siparis_adi": siparis_adi
+    }
+    with open("learned_matches.json", "w", encoding="utf-8") as f:
+        json.dump(matches, f, indent=2, ensure_ascii=False)
+
 def convert_to_xml(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1].lower()
     try:
@@ -141,16 +157,33 @@ if u_order and u_invoice:
             normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
             normalized_siparis_adlar = [normalize_name(ad) for ad in siparis_adlar]
 
+            learned = load_learned_matches()
+
             for _, f_row in df_fatura.iterrows():
                 f_kod_norm = normalize_code(f_row["kod"])
-                kod_eslesme = process.extractOne(f_kod_norm, normalized_siparis_kodlar, scorer=fuzz.ratio)
-                kod_score, name_score, idx = 0, 0, None
+                f_name_norm = normalize_name(f_row["adi"])
 
+                # 👇 Eğer daha önce eşleştirilmişse direkt yükle
+                if f_row["kod"] in learned:
+                    matched = learned[f_row["kod"]]
+                    kod_score = 100
+                    durum = "ÖĞRENİLDİ"
+                    results.append({
+                        "Fatura Kodu": f_row["kod"],
+                        "Fatura Adı": f_row["adi"],
+                        "Sipariş Kodu": matched["siparis_kodu"],
+                        "Sipariş Adı": matched["siparis_adi"],
+                        "Eşleşme Oranı (%)": 100.0,
+                        "Durum": durum
+                    })
+                    continue
+
+                kod_score, name_score, idx = 0, 0, None
+                kod_eslesme = process.extractOne(f_kod_norm, normalized_siparis_kodlar, scorer=fuzz.ratio)
                 if kod_eslesme:
                     _, kod_score, idx = kod_eslesme
 
                 if f_row["adi"]:
-                    f_name_norm = normalize_name(f_row["adi"])
                     name_eslesme = process.extractOne(f_name_norm, normalized_siparis_adlar, scorer=fuzz.partial_ratio)
                     if name_eslesme:
                         _, name_score, idx2 = name_eslesme
@@ -171,8 +204,10 @@ if u_order and u_invoice:
                     "Durum": durum
                 })
 
-            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+                if durum == "EŞLEŞTİ":
+                    save_learned_match(f_row["kod"], matched["kod"], f_row["adi"], matched["adi"])
 
+            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
             df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy().reset_index(drop=True)
             df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
 
@@ -196,7 +231,7 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")  
+        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
 
 
 
