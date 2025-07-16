@@ -232,6 +232,42 @@ if u_order and u_invoice:
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+        # -------------------------------
+# 📘 Öğrenilen Eşleşmeleri Göster
+# -------------------------------
+st.markdown("---")
+st.subheader("📘 Öğrenilen (Kaydedilen) Eşleşmeler")
+
+if os.path.exists("learned_matches.json"):
+    with open("learned_matches.json", "r", encoding="utf-8") as f:
+        learned_data = json.load(f)
+
+    df_learned = pd.DataFrame([
+        {
+            "Fatura Kodu": fatura_kodu,
+            "Fatura Adı": veri["fatura_adi"],
+            "Sipariş Kodu": veri["siparis_kodu"],
+            "Sipariş Adı": veri["siparis_adi"]
+        }
+        for fatura_kodu, veri in learned_data.items()
+    ])
+
+    st.dataframe(df_learned)
+
+    # 🗑️ Silme özelliği
+    st.markdown("### 🗑️ Öğrenilen Eşleşmeleri Sil")
+    secilecek_kod = st.selectbox("Silmek istediğiniz fatura kodunu seçin:", df_learned["Fatura Kodu"].tolist())
+
+    if st.button("🗑️ Seçilen eşleşmeyi sil"):
+        learned_data.pop(secilecek_kod, None)
+        with open("learned_matches.json", "w", encoding="utf-8") as f:
+            json.dump(learned_data, f, indent=2, ensure_ascii=False)
+        st.success(f"✅ {secilecek_kod} eşleşmesi silindi.")
+        st.experimental_rerun()
+
+else:
+    st.info("ℹ️ Henüz öğrenilmiş eşleşme yok.")
+
 
 
 
