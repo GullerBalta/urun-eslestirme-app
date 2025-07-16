@@ -111,6 +111,21 @@ def extract_items(xml_file, supplier_name=None):
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
+# ✅ EĞİTİM VERİSİ TOPLAMA FONKSİYONU
+def update_training_data(code_score, name_score, match_label):
+    new_row = pd.DataFrame([{
+        "code_similarity": code_score,
+        "name_similarity": name_score,
+        "match": match_label
+    }])
+    file_path = "learned_training_data.csv"
+    if os.path.exists(file_path):
+        existing = pd.read_csv(file_path)
+        df = pd.concat([existing, new_row], ignore_index=True)
+    else:
+        df = new_row
+    df.to_csv(file_path, index=False)
+
 supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
@@ -162,6 +177,10 @@ if u_order and u_invoice:
                 matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
                 durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
+                # ✅ EĞİTİM VERİSİNE EKLE
+                match_label = 1 if kod_score >= threshold else 0
+                update_training_data(kod_score, name_score, match_label)
+
                 results.append({
                     "Fatura Kodu": f_row["kod"],
                     "Fatura Adı": f_row["adi"],
@@ -196,4 +215,5 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx") 
+        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+
