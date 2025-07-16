@@ -1,3 +1,6 @@
+
+
+
 import streamlit as st
 import pandas as pd
 import re
@@ -58,14 +61,26 @@ def convert_to_xml(uploaded_file):
         if file_type == "xml":
             return uploaded_file
         elif file_type in ["csv", "txt"]:
-            df = pd.read_csv(uploaded_file)
+            df = pd.read_csv(uploaded_file, dtype=str)
         elif file_type in ["xls", "xlsx"]:
-            df = pd.read_excel(uploaded_file)
+            df = pd.read_excel(uploaded_file, dtype=str)
         else:
             st.error("❌ Desteklenmeyen dosya türü.")
             return None
 
+        # 🛠 Otomatik sütun adlandırması
+        if "Sipariş" in df.columns:
+            df.rename(columns={"Sipariş": "kod"}, inplace=True)
+        if "Fatura" in df.columns:
+            df.rename(columns={"Fatura": "kod"}, inplace=True)
+        if "Ürün Adı" in df.columns:
+            df.rename(columns={"Ürün Adı": "adi"}, inplace=True)
+        if "Ürün_Adı" in df.columns:
+            df.rename(columns={"Ürün_Adı": "adi"}, inplace=True)
+
         df.columns = [clean_column_name(col) for col in df.columns]
+
+        # XML'e çevir
         root = etree.Element("Data")
         for _, row in df.iterrows():
             item_elem = etree.SubElement(root, "Item")
@@ -111,7 +126,6 @@ def extract_items(xml_file, supplier_name=None):
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-# ✅ EĞİTİM VERİSİ TOPLAMA FONKSİYONU
 def update_training_data(code_score, name_score, match_label):
     new_row = pd.DataFrame([{
         "code_similarity": code_score,
@@ -177,7 +191,6 @@ if u_order and u_invoice:
                 matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
                 durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
-                # ✅ EĞİTİM VERİSİNE EKLE
                 match_label = 1 if kod_score >= threshold else 0
                 update_training_data(kod_score, name_score, match_label)
 
@@ -216,6 +229,4 @@ if u_order and u_invoice:
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
-
-
 
