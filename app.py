@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
 import re
-from rapidfuzz import fuzz
+from rapidfuzz import process, fuzz
 from io import BytesIO
+from lxml import etree
+import json
+import os
 
 st.set_page_config(layout="wide")
 st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
@@ -14,14 +17,14 @@ w_name = 1 - w_code
 u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
-# Baştaki sıfırları eşleştirmede sil, görüntüde tut
+# Sıfırları temizle ama kodu bozmadan göster
 def temizle_kod(kod):
     if pd.isna(kod):
         return ""
     kod = str(kod).strip()
     return re.sub(r"^0+", "", kod)
 
-# Eşleşme seviyesi ifadesi
+# Benzerlik seviyesi ifadesi
 def eslesme_seviyesi(puan):
     if puan >= 97:
         return "🟢 Mükemmel"
@@ -32,27 +35,14 @@ def eslesme_seviyesi(puan):
     else:
         return "🔴 Eşleşmedi"
 
-# Başlıkları normalize et: "ürün kodu" → "kod", "Ürün Adı" → "adi"
-def normalize_column_names(df):
-    original_columns = df.columns.tolist()
-    df.columns = [col.strip().lower() for col in df.columns]
-    rename_map = {}
-    for col in df.columns:
-        if "kod" in col:
-            rename_map[col] = "kod"
-        elif "ad" in col:
-            rename_map[col] = "adi"
-    df = df.rename(columns=rename_map)
-    return df, original_columns
-
 # Eşleştirme fonksiyonu
 def kod_ad_ile_eslestir(df_fatura, df_siparis):
     eslesen_kayitlar = []
     eslesmeyen_kayitlar = []
 
     for _, f_row in df_fatura.iterrows():
-        kod_f = str(f_row.get("kod", "")).strip()
-        ad_f = str(f_row.get("adi", "")).strip()
+        kod_f = str(f_row["kod"]).strip()
+        ad_f = str(f_row["adi"]).strip()
         kod_f_clean = temizle_kod(kod_f)
         ad_f_clean = ad_f.lower()
 
@@ -60,8 +50,8 @@ def kod_ad_ile_eslestir(df_fatura, df_siparis):
         en_iyi_siparis = None
 
         for _, s_row in df_siparis.iterrows():
-            kod_s = str(s_row.get("kod", "")).strip()
-            ad_s = str(s_row.get("adi", "")).strip()
+            kod_s = str(s_row["kod"]).strip()
+            ad_s = str(s_row["adi"]).strip()
             kod_s_clean = temizle_kod(kod_s)
             ad_s_clean = ad_s.lower()
 
@@ -92,27 +82,19 @@ def kod_ad_ile_eslestir(df_fatura, df_siparis):
 
     return pd.DataFrame(eslesen_kayitlar), pd.DataFrame(eslesmeyen_kayitlar)
 
+
 if u_order and u_invoice:
     try:
-        df_siparis = pd.read_excel(u_order, dtype=str)
+        df_siparis = pd.read_excel(u_order, dtype={"kod": str})
     except:
-        df_siparis = pd.read_csv(u_order, dtype=str)
+        df_siparis = pd.read_csv(u_order, dtype={"kod": str})
 
     try:
-        df_fatura = pd.read_excel(u_invoice, dtype=str)
+        df_fatura = pd.read_excel(u_invoice, dtype={"kod": str})
     except:
-        df_fatura = pd.read_csv(u_invoice, dtype=str)
+        df_fatura = pd.read_csv(u_invoice, dtype={"kod": str})
 
-    # Orijinal sütun adlarını göster
-    st.write("📋 Sipariş Dosyası Orijinal Sütun Başlıkları:")
-    st.write(df_siparis.columns.tolist())
-    st.write("📋 Fatura Dosyası Orijinal Sütun Başlıkları:")
-    st.write(df_fatura.columns.tolist())
-
-    # Normalize et
-    df_siparis, _ = normalize_column_names(df_siparis)
-    df_fatura, _ = normalize_column_names(df_fatura)
-
+    # Boş alan varsa doldur
     df_siparis.fillna("", inplace=True)
     df_fatura.fillna("", inplace=True)
 
@@ -131,15 +113,17 @@ if u_order and u_invoice:
         st.subheader(f"❌ Eşleşmeyen Kayıtlar: {len(df_eslesmeyen)}")
         st.dataframe(df_eslesmeyen)
 
+        # Excel çıktısı
         buffer = BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_eslesen.to_excel(writer, sheet_name="Eslesen", index=False)
             df_eslesmeyen.to_excel(writer, sheet_name="Eslesmeyen", index=False)
         st.download_button("📥 Excel İndir", buffer.getvalue(), file_name="eslesme_sonuclari.xlsx")
     else:
-        st.error("❗ Yüklenen dosyalarda 'kod' sütunu eksik. Lütfen sütun adlarını kontrol edin.")
+        st.warning("❗ Yüklenen dosyalarda 'kod' sütunu eksik.")
 else:
     st.info("⬆️ Lütfen sipariş ve fatura dosyalarını yükleyin.")
+
 
 
 
