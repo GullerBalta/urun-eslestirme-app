@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-from rapidfuzz import process, fuzz
+from rapidfuzz import fuzz
 from io import BytesIO
 from lxml import etree
-import json
 import os
 
 st.set_page_config(layout="wide")
@@ -35,14 +34,23 @@ def eslesme_seviyesi(puan):
     else:
         return "🔴 Eşleşmedi"
 
+# Sütun isimlerini normalize et
+def normalize_column_names(df):
+    for col in df.columns:
+        if "kod" in col.lower():
+            df = df.rename(columns={col: "kod"})
+        if "ad" in col.lower():
+            df = df.rename(columns={col: "adi"})
+    return df
+
 # Eşleştirme fonksiyonu
 def kod_ad_ile_eslestir(df_fatura, df_siparis):
     eslesen_kayitlar = []
     eslesmeyen_kayitlar = []
 
     for _, f_row in df_fatura.iterrows():
-        kod_f = str(f_row["kod"]).strip()
-        ad_f = str(f_row["adi"]).strip()
+        kod_f = str(f_row.get("kod", "")).strip()
+        ad_f = str(f_row.get("adi", "")).strip()
         kod_f_clean = temizle_kod(kod_f)
         ad_f_clean = ad_f.lower()
 
@@ -50,8 +58,8 @@ def kod_ad_ile_eslestir(df_fatura, df_siparis):
         en_iyi_siparis = None
 
         for _, s_row in df_siparis.iterrows():
-            kod_s = str(s_row["kod"]).strip()
-            ad_s = str(s_row["adi"]).strip()
+            kod_s = str(s_row.get("kod", "")).strip()
+            ad_s = str(s_row.get("adi", "")).strip()
             kod_s_clean = temizle_kod(kod_s)
             ad_s_clean = ad_s.lower()
 
@@ -82,19 +90,21 @@ def kod_ad_ile_eslestir(df_fatura, df_siparis):
 
     return pd.DataFrame(eslesen_kayitlar), pd.DataFrame(eslesmeyen_kayitlar)
 
-
 if u_order and u_invoice:
     try:
-        df_siparis = pd.read_excel(u_order, dtype={"kod": str})
+        df_siparis = pd.read_excel(u_order, dtype=str)
     except:
-        df_siparis = pd.read_csv(u_order, dtype={"kod": str})
+        df_siparis = pd.read_csv(u_order, dtype=str)
 
     try:
-        df_fatura = pd.read_excel(u_invoice, dtype={"kod": str})
+        df_fatura = pd.read_excel(u_invoice, dtype=str)
     except:
-        df_fatura = pd.read_csv(u_invoice, dtype={"kod": str})
+        df_fatura = pd.read_csv(u_invoice, dtype=str)
 
-    # Boş alan varsa doldur
+    # Başlıkları normalize et
+    df_siparis = normalize_column_names(df_siparis)
+    df_fatura = normalize_column_names(df_fatura)
+
     df_siparis.fillna("", inplace=True)
     df_fatura.fillna("", inplace=True)
 
