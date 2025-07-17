@@ -4,5 +4,6 @@ lxml
 rapidfuzz
 openpyxl
 matplotlib
-bcrypt
+passlib
+
 
