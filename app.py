@@ -45,7 +45,7 @@ def init_learning_db():
 
 init_learning_db()
 
-# 🧠 Öğrenme fonksiyonu: başarılı eşleşmeleri veritabanına kaydeder
+# 🧠 Öğrenme fonksiyonu
 def save_learned_match(supplier, invoice_code, order_code, invoice_name, order_name, score):
     conn = sqlite3.connect("learning.db")
     cursor = conn.cursor()
@@ -56,7 +56,7 @@ def save_learned_match(supplier, invoice_code, order_code, invoice_name, order_n
     conn.commit()
     conn.close()
 
-# 🎯 Eşleşme puanının anlamı
+# 🎯 Eşleşme seviyesi
 def eslesme_seviyesi(puan):
     if puan >= 97:
         return "🟢 Mükemmel"
@@ -67,7 +67,7 @@ def eslesme_seviyesi(puan):
     else:
         return "⚪ Düşük"
 
-# 🔐 Admin giriş alanları
+# 🔐 Admin giriş
 admin_user = "admin"
 admin_password = "1234"
 
@@ -76,33 +76,42 @@ password = st.text_input("🔑 Şifre", type="password")
 
 is_admin = (username == admin_user and password == admin_password)
 
-# 🔐 Sadece admin için veritabanı işlemleri
 if is_admin:
     st.success("✅ Giriş başarılı. Yönetici paneli aktif.")
 
-    # 📥 Veritabanı indir butonu
+    # Veritabanı indir
     if os.path.exists("learning.db"):
         with open("learning.db", "rb") as f:
             st.download_button("📥 Öğrenme Veritabanını İndir (.db)", f, file_name="learning.db")
 
-    # 📂 Öğrenilen kayıtları göster
+    # Öğrenilen kayıtları göster
     if st.button("📂 Öğrenilen Kayıtları Göster"):
         conn = sqlite3.connect("learning.db")
         df_learned = pd.read_sql_query("SELECT * FROM learned_matches", conn)
         conn.close()
         st.dataframe(df_learned)
 
-elif username or password:  # Yanlış giriş varsa uyar
+elif username or password:
     st.warning("❌ Giriş başarısız. Lütfen bilgileri kontrol edin.")
 
 # 📊 Eşleştirme işlemi
 if u_order and u_invoice and supplier_name.strip():
+    # Dosyaları oku
     df_order = pd.read_xml(u_order) if u_order.name.endswith(".xml") else pd.read_csv(u_order)
     df_invoice = pd.read_xml(u_invoice) if u_invoice.name.endswith(".xml") else pd.read_csv(u_invoice)
 
+    # Kolon kontrolleri
+    for col in ["urun_kodu", "urun_adi"]:
+        if col not in df_order.columns:
+            st.error(f"❌ Sipariş dosyasında '{col}' sütunu bulunamadı.")
+            st.stop()
+        if col not in df_invoice.columns:
+            st.error(f"❌ Fatura dosyasında '{col}' sütunu bulunamadı.")
+            st.stop()
+
+    # Kodları ve adları al
     order_codes = df_order["urun_kodu"].astype(str)
     invoice_codes = df_invoice["urun_kodu"].astype(str)
-
     order_names = df_order["urun_adi"].astype(str)
     invoice_names = df_invoice["urun_adi"].astype(str)
 
@@ -132,7 +141,7 @@ if u_order and u_invoice and supplier_name.strip():
             "Eşleşme Seviyesi": eslesme_seviyesi(best_score)
         })
 
-        # 🔁 Öğrenmeyi kaydet
+        # Öğrenme
         if best_score >= 97:
             save_learned_match(
                 supplier=supplier_name.strip(),
@@ -144,5 +153,9 @@ if u_order and u_invoice and supplier_name.strip():
             )
 
     df_results = pd.DataFrame(eslesen_kayitlar)
-    st.subheader("🔍 Eşleşen Kayıtlar")
-    st.dataframe(df_results, use_container_width=True)
+
+    if not df_results.empty:
+        st.subheader("🔍 Eşleşen Kayıtlar")
+        st.dataframe(df_results, use_container_width=True)
+    else:
+        st.warning("⚠️ Eşleşme bulunamadı.")
