@@ -67,20 +67,20 @@ def eslesme_seviyesi(puan):
     else:
         return "⚪ Düşük"
 
+# 🔐 Admin giriş alanları
 admin_user = "admin"
 admin_password = "1234"
 
-# Kullanıcı giriş alanı
 username = st.text_input("🔐 Admin Girişi (Sadece Senin İçin)", type="default")
 password = st.text_input("🔑 Şifre", type="password")
 
 is_admin = (username == admin_user and password == admin_password)
 
-# Admin girişi başarılıysa dosyaları göster
+# 🔐 Sadece admin için veritabanı işlemleri
 if is_admin:
     st.success("✅ Giriş başarılı. Yönetici paneli aktif.")
-    
-    # 📥 Veritabanı indir
+
+    # 📥 Veritabanı indir butonu
     if os.path.exists("learning.db"):
         with open("learning.db", "rb") as f:
             st.download_button("📥 Öğrenme Veritabanını İndir (.db)", f, file_name="learning.db")
@@ -92,27 +92,14 @@ if is_admin:
         conn.close()
         st.dataframe(df_learned)
 
-elif username or password:
+elif username or password:  # Yanlış giriş varsa uyar
     st.warning("❌ Giriş başarısız. Lütfen bilgileri kontrol edin.")
-
-# 📥 Veritabanı indirme butonu
-if os.path.exists("learning.db"):
-    with open("learning.db", "rb") as f:
-        st.download_button("📥 Öğrenme Veritabanını İndir (.db)", f, file_name="learning.db")
-
-# 📂 Öğrenilen kayıtları görüntüle
-if st.button("📂 Öğrenilen Kayıtları Göster"):
-    conn = sqlite3.connect("learning.db")
-    df_learned = pd.read_sql_query("SELECT * FROM learned_matches", conn)
-    conn.close()
-    st.dataframe(df_learned)
 
 # 📊 Eşleştirme işlemi
 if u_order and u_invoice and supplier_name.strip():
     df_order = pd.read_xml(u_order) if u_order.name.endswith(".xml") else pd.read_csv(u_order)
     df_invoice = pd.read_xml(u_invoice) if u_invoice.name.endswith(".xml") else pd.read_csv(u_invoice)
 
-    # Varsayılan kolon adları
     order_codes = df_order["urun_kodu"].astype(str)
     invoice_codes = df_invoice["urun_kodu"].astype(str)
 
