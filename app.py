@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-from rapidfuzz import process, fuzz
+from rapidfuzz import fuzz
 from io import BytesIO
 from lxml import etree
-import json
 import os
 import sqlite3
 from datetime import datetime
@@ -77,13 +76,9 @@ is_admin = (username == admin_user and password == admin_password)
 
 if is_admin:
     st.success("✅ Giriş başarılı. Yönetici paneli aktif.")
-
-    # Veritabanı indir
     if os.path.exists("learning.db"):
         with open("learning.db", "rb") as f:
             st.download_button("📥 Öğrenme Veritabanını İndir (.db)", f, file_name="learning.db")
-
-    # Öğrenilen kayıtları göster
     if st.button("📂 Öğrenilen Kayıtları Göster"):
         conn = sqlite3.connect("learning.db")
         df_learned = pd.read_sql_query("SELECT * FROM learned_matches", conn)
@@ -95,24 +90,25 @@ elif username or password:
 
 # 📊 Eşleştirme işlemi
 if u_order and u_invoice and supplier_name.strip():
-    # Dosyaları oku
-    df_order = pd.read_xml(u_order) if u_order.name.endswith(".xml") else pd.read_csv(u_order)
-    df_invoice = pd.read_xml(u_invoice) if u_invoice.name.endswith(".xml") else pd.read_csv(u_invoice)
+    def parse_file(file):
+        if file.name.endswith(".xml"):
+            df = pd.read_xml(file)
+        elif file.name.endswith((".xls", ".xlsx")):
+            df = pd.read_excel(file)
+        else:
+            df = pd.read_csv(file)
+        return df
 
-    # Kolon kontrolleri
-    for col in ["urun_kodu", "urun_adi"]:
-        if col not in df_order.columns:
-            st.error(f"❌ Sipariş dosyasında '{col}' sütunu bulunamadı.")
-            st.stop()
-        if col not in df_invoice.columns:
-            st.error(f"❌ Fatura dosyasında '{col}' sütunu bulunamadı.")
-            st.stop()
+    df_order = parse_file(u_order)
+    df_invoice = parse_file(u_invoice)
 
-    # Kodları ve adları al
-    order_codes = df_order["urun_kodu"].astype(str)
-    invoice_codes = df_invoice["urun_kodu"].astype(str)
-    order_names = df_order["urun_adi"].astype(str)
-    invoice_names = df_invoice["urun_adi"].astype(str)
+    # Ürün kodlarını al
+    order_codes = df_order.iloc[:, 0].astype(str)
+    invoice_codes = df_invoice.iloc[:, 0].astype(str)
+
+    # Ürün adları varsa kullan, yoksa boş string ata
+    order_names = df_order.iloc[:, 1].astype(str) if df_order.shape[1] > 1 else pd.Series([""] * len(df_order))
+    invoice_names = df_invoice.iloc[:, 1].astype(str) if df_invoice.shape[1] > 1 else pd.Series([""] * len(df_invoice))
 
     eslesen_kayitlar = []
 
@@ -140,7 +136,6 @@ if u_order and u_invoice and supplier_name.strip():
             "Eşleşme Seviyesi": eslesme_seviyesi(best_score)
         })
 
-        # Öğrenme
         if best_score >= 97:
             save_learned_match(
                 supplier=supplier_name.strip(),
@@ -152,10 +147,6 @@ if u_order and u_invoice and supplier_name.strip():
             )
 
     df_results = pd.DataFrame(eslesen_kayitlar)
-
-    if not df_results.empty:
-        st.subheader("🔍 Eşleşen Kayıtlar")
-        st.dataframe(df_results, use_container_width=True)
-    else:
-        st.warning("⚠️ Eşleşme bulunamadı.")
+    st.subheader("🔍 Eşleşen Kayıtlar")
+    st.dataframe(df_results, use_container_width=True)
 
