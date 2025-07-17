@@ -4,4 +4,4 @@ lxml
 rapidfuzz
 openpyxl
 matplotlib
-bcrypt
+
