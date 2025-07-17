@@ -1,6 +1,3 @@
-
-
-
 import streamlit as st
 import pandas as pd
 import re
@@ -61,26 +58,14 @@ def convert_to_xml(uploaded_file):
         if file_type == "xml":
             return uploaded_file
         elif file_type in ["csv", "txt"]:
-            df = pd.read_csv(uploaded_file, dtype=str)
+            df = pd.read_csv(uploaded_file)
         elif file_type in ["xls", "xlsx"]:
-            df = pd.read_excel(uploaded_file, dtype=str)
+            df = pd.read_excel(uploaded_file)
         else:
             st.error("❌ Desteklenmeyen dosya türü.")
             return None
 
-        # 🛠 Otomatik sütun adlandırması
-        if "Sipariş" in df.columns:
-            df.rename(columns={"Sipariş": "kod"}, inplace=True)
-        if "Fatura" in df.columns:
-            df.rename(columns={"Fatura": "kod"}, inplace=True)
-        if "Ürün Adı" in df.columns:
-            df.rename(columns={"Ürün Adı": "adi"}, inplace=True)
-        if "Ürün_Adı" in df.columns:
-            df.rename(columns={"Ürün_Adı": "adi"}, inplace=True)
-
         df.columns = [clean_column_name(col) for col in df.columns]
-
-        # XML'e çevir
         root = etree.Element("Data")
         for _, row in df.iterrows():
             item_elem = etree.SubElement(root, "Item")
@@ -125,20 +110,6 @@ def extract_items(xml_file, supplier_name=None):
                     kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
-
-def update_training_data(code_score, name_score, match_label):
-    new_row = pd.DataFrame([{
-        "code_similarity": code_score,
-        "name_similarity": name_score,
-        "match": match_label
-    }])
-    file_path = "learned_training_data.csv"
-    if os.path.exists(file_path):
-        existing = pd.read_csv(file_path)
-        df = pd.concat([existing, new_row], ignore_index=True)
-    else:
-        df = new_row
-    df.to_csv(file_path, index=False)
 
 supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
@@ -191,9 +162,6 @@ if u_order and u_invoice:
                 matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
                 durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
-                match_label = 1 if kod_score >= threshold else 0
-                update_training_data(kod_score, name_score, match_label)
-
                 results.append({
                     "Fatura Kodu": f_row["kod"],
                     "Fatura Adı": f_row["adi"],
@@ -228,5 +196,5 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx") 
 
