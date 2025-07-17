@@ -1,15 +1,13 @@
 import streamlit as st
 import pandas as pd
-import re
-from rapidfuzz import fuzz
-from io import BytesIO
 from lxml import etree
-import os
 import sqlite3
+from rapidfuzz import fuzz
 from datetime import datetime
+import os
 
 st.set_page_config(layout="wide")
-st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
+st.title("📦 Akıllı Sipariş | Otomatik Ürün Kodu-Adı Tespiti ve Eşleştirme")
 
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
@@ -19,7 +17,6 @@ u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml"])
 supplier_name = st.text_input("🏷️ Tedarikçi Adı", "")
 
-# 📦 Veritabanı kurulumu
 def init_learning_db():
     conn = sqlite3.connect("learning.db")
     cursor = conn.cursor()
@@ -60,61 +57,43 @@ def eslesme_seviyesi(puan):
     else:
         return "⚪ Düşük"
 
-# 🔐 Admin
-admin_user = "admin"
-admin_password = "1234"
-
-username = st.text_input("🔐 Admin Girişi (Sadece Senin İçin)", type="default")
-password = st.text_input("🔑 Şifre", type="password")
-is_admin = (username == admin_user and password == admin_password)
-
-if is_admin:
-    st.success("✅ Giriş başarılı. Yönetici paneli aktif.")
-    if os.path.exists("learning.db"):
-        with open("learning.db", "rb") as f:
-            st.download_button("📥 Öğrenme Veritabanını İndir (.db)", f, file_name="learning.db")
-    if st.button("📂 Öğrenilen Kayıtları Göster"):
-        conn = sqlite3.connect("learning.db")
-        df_learned = pd.read_sql_query("SELECT * FROM learned_matches", conn)
-        conn.close()
-        st.dataframe(df_learned)
-
-elif username or password:
-    st.warning("❌ Giriş başarısız. Lütfen bilgileri kontrol edin.")
-
-# 🧠 XML'den otomatik ürün kodu ve adı çıkarma
-def kod_ve_adlari_bul(dosya, min_karakter=5, max_karakter=25):
-    tree = etree.parse(dosya)
+# 🔍 Otomatik XML alan bulucu
+def parse_xml_auto_fields(uploaded_file):
+    tree = etree.parse(uploaded_file)
     root = tree.getroot()
-    kodlar = []
-    adlar = []
 
+    urunler = []
     for elem in root.iter():
+        kod = ""
+        ad = ""
         if elem.text:
-            metin = elem.text.strip()
-            if re.fullmatch(r'[A-Za-z0-9\-\.\_]{%d,%d}' % (min_karakter, max_karakter), metin):
-                kodlar.append(metin)
-            elif len(metin) > 10 and " " in metin:
-                adlar.append(metin)
+            text = elem.text.strip()
+            if 5 <= len(text) <= 25 and any(c.isdigit() for c in text):
+                kod = text
+            if len(text) > 3 and any(c.isalpha() for c in text) and not kod:
+                ad = text
+        if kod or ad:
+            urunler.append({"urun_kodu": kod, "urun_adi": ad})
+    df = pd.DataFrame(urunler).drop_duplicates()
+    df = df[(df["urun_kodu"] != "") & (df["urun_adi"] != "")]
+    return df.reset_index(drop=True)
 
-    min_len = min(len(kodlar), len(adlar))
-    return pd.DataFrame({
-        "urun_kodu": kodlar[:min_len],
-        "urun_adi": adlar[:min_len]
-    })
-
-# 📊 Eşleştirme
 if u_order and u_invoice and supplier_name.strip():
-    df_order = kod_ve_adlari_bul(u_order)
-    df_invoice = kod_ve_adlari_bul(u_invoice)
+    df_order = parse_xml_auto_fields(u_order)
+    df_invoice = parse_xml_auto_fields(u_invoice)
+
+    st.write("📦 Sipariş Verisi:", df_order.head())
+    st.write("🧾 Fatura Verisi:", df_invoice.head())
 
     eslesen_kayitlar = []
 
-    for i_code, i_name in zip(df_invoice["urun_kodu"], df_invoice["urun_adi"]):
+    for _, f_row in df_invoice.iterrows():
+        i_code, i_name = f_row["urun_kodu"], f_row["urun_adi"]
         best_score = 0
         best_o_code, best_o_name = "", ""
 
-        for o_code, o_name in zip(df_order["urun_kodu"], df_order["urun_adi"]):
+        for _, o_row in df_order.iterrows():
+            o_code, o_name = o_row["urun_kodu"], o_row["urun_adi"]
             score_code = fuzz.token_sort_ratio(i_code, o_code)
             score_name = fuzz.token_sort_ratio(i_name, o_name)
             total_score = (score_code * w_code + score_name * w_name)
@@ -135,7 +114,7 @@ if u_order and u_invoice and supplier_name.strip():
 
         if best_score >= 97:
             save_learned_match(
-                supplier=supplier_name.strip(),
+                supplier=supplier_name,
                 invoice_code=i_code,
                 order_code=best_o_code,
                 invoice_name=i_name,
@@ -146,5 +125,6 @@ if u_order and u_invoice and supplier_name.strip():
     df_results = pd.DataFrame(eslesen_kayitlar)
     st.subheader("🔍 Eşleşen Kayıtlar")
     st.dataframe(df_results, use_container_width=True)
+
 
 
