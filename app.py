@@ -113,14 +113,17 @@ if u_order and u_invoice and supplier_name.strip():
     eslesen_kayitlar = []
 
     for i_code, i_name in zip(invoice_codes, invoice_names):
-        best_match = None
         best_score = 0
         best_o_code, best_o_name = "", ""
 
         for o_code, o_name in zip(order_codes, order_names):
             score_code = fuzz.token_sort_ratio(i_code, o_code)
-            score_name = fuzz.token_sort_ratio(i_name, o_name)
-            total_score = (score_code * w_code + score_name * w_name)
+
+            if i_name.strip() or o_name.strip():
+                score_name = fuzz.token_sort_ratio(i_name, o_name)
+                total_score = (score_code * w_code + score_name * w_name)
+            else:
+                total_score = score_code  # sadece ürün koduna göre
 
             if total_score > best_score:
                 best_score = total_score
@@ -147,6 +150,10 @@ if u_order and u_invoice and supplier_name.strip():
             )
 
     df_results = pd.DataFrame(eslesen_kayitlar)
-    st.subheader("🔍 Eşleşen Kayıtlar")
-    st.dataframe(df_results, use_container_width=True)
+
+    if not df_results.empty:
+        st.subheader("🔍 Eşleşen Kayıtlar")
+        st.dataframe(df_results, use_container_width=True)
+    else:
+        st.warning("⚠️ Eşleşme bulunamadı. Lütfen dosyaların içeriklerini kontrol edin.")
 
