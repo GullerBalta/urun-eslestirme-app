@@ -14,9 +14,8 @@ threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-u_order = st.file_uploader("📄 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-u_invoice = st.file_uploader("📄 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
+u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
 def eslesme_seviyesi(puan):
     if puan >= 97:
@@ -45,7 +44,7 @@ def clean_column_name(name):
     return name
 
 def normalize_code(code):
-    return re.sub(r'[^A-Za-z0-9]', '', str(code)).lstrip("0")
+    return re.sub(r'[^A-Za-z0-9]', '', str(code))
 
 def normalize_name(name):
     name = str(name).lower()
@@ -104,43 +103,21 @@ def extract_items(xml_file, supplier_name=None):
     for elem in root.iter():
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
-            kodlar = re.findall(r"[A-Z0-9\-\.]{5,}", txt)
-            for kod in kodlar:
-                orj_kod = kod.strip()
-                kod_normalized = normalize_code(orj_kod)
+            for kod in re.findall(r"\b[A-Za-z0-9\-\._]{5,20}\b", txt):
+                adi = txt.replace(kod, "").strip(" -:;:")
                 if supplier_pattern:
-                    prefix_pattern = supplier_pattern.get("remove_prefix", "^$")
-                    suffix_pattern = supplier_pattern.get("remove_suffix", "$^")
-                    kod_normalized = re.sub(prefix_pattern, "", kod_normalized)
-                    kod_normalized = re.sub(suffix_pattern, "", kod_normalized)
+                    kod = re.sub(supplier_pattern.get("remove_prefix", "^$"), "", kod)
+                    kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
+                records.append({"kod": kod, "adi": adi})
+    return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-                # Otomatik ürün adı belirleme
-                adi = txt.replace(orj_kod, "").strip(" -:;:")
-                if not adi and len(txt) > len(kod):
-                    adi = txt.replace(kod, "").strip()
+supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
+prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
+suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
 
-                records.append({
-                    "kod": kod_normalized,
-                    "adi": adi,
-                    "orj_kod": orj_kod
-                })
-
-    df = pd.DataFrame(records)
-    if not df.empty:
-        df = df.drop_duplicates(subset=["kod", "adi"])
-    return df
-
-def auto_detect_prefix_suffix(kod_listesi):
-    from collections import Counter
-    prefixler = Counter()
-    suffixler = Counter()
-    for kod in kod_listesi:
-        if len(kod) > 6:
-            prefixler[kod[:2]] += 1
-            suffixler[kod[-2:]] += 1
-    tahmin_prefix = prefixler.most_common(1)[0][0] if prefixler else ""
-    tahmin_suffix = suffixler.most_common(1)[0][0] if suffixler else ""
-    return tahmin_prefix, tahmin_suffix
+if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
+    save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
+    st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
@@ -156,20 +133,10 @@ if u_order and u_invoice:
         st.subheader("🧾 Fatura Verileri (İlk 5000)")
         st.dataframe(df_fatura)
 
-        if supplier_name and st.button("🤖 Tedarikçi Formatını Otomatik Öğren"):
-            prefix, suffix = auto_detect_prefix_suffix(df_fatura['kod'].tolist())
-            st.info(f"🔍 Otomatik Algılanan: Ön Ek = '{prefix}', Son Ek = '{suffix}'")
-            save_supplier_pattern(supplier_name, {
-                "remove_prefix": f"^{prefix}" if prefix else "^$",
-                "remove_suffix": f"{suffix}$" if suffix else "$^"
-            })
-            st.success(f"💾 '{supplier_name}' için tahmin edilen şablon kaydedildi.")
-
         with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
-            siparis_kodlar = df_siparis["orj_kod"].tolist()
+            siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
-            orj_kodlar = df_siparis["orj_kod"].tolist()
 
             normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
             normalized_siparis_adlar = [normalize_name(ad) for ad in siparis_adlar]
@@ -192,10 +159,7 @@ if u_order and u_invoice:
                             idx = idx2
                             kod_score = combined_score
 
-                matched = {
-                    "kod": orj_kodlar[idx],
-                    "adi": siparis_adlar[idx]
-                } if idx is not None else {"kod": "", "adi": ""}
+                matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
                 durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
                 results.append({
