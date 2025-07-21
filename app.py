@@ -104,7 +104,8 @@ def extract_items(xml_file, supplier_name=None):
     for elem in root.iter():
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
-            for kod in re.findall(r"[A-Za-z0-9\-\._]{5,20}", txt):
+            kodlar = re.findall(r"[A-Z0-9\-\.]{5,}", txt)
+            for kod in kodlar:
                 orj_kod = kod.strip()
                 kod_normalized = normalize_code(orj_kod)
                 if supplier_pattern:
@@ -112,9 +113,22 @@ def extract_items(xml_file, supplier_name=None):
                     suffix_pattern = supplier_pattern.get("remove_suffix", "$^")
                     kod_normalized = re.sub(prefix_pattern, "", kod_normalized)
                     kod_normalized = re.sub(suffix_pattern, "", kod_normalized)
+
+                # Otomatik ürün adı belirleme
                 adi = txt.replace(orj_kod, "").strip(" -:;:")
-                records.append({"kod": kod_normalized, "adi": adi, "orj_kod": orj_kod})
-    return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
+                if not adi and len(txt) > len(kod):
+                    adi = txt.replace(kod, "").strip()
+
+                records.append({
+                    "kod": kod_normalized,
+                    "adi": adi,
+                    "orj_kod": orj_kod
+                })
+
+    df = pd.DataFrame(records)
+    if not df.empty:
+        df = df.drop_duplicates(subset=["kod", "adi"])
+    return df
 
 def auto_detect_prefix_suffix(kod_listesi):
     from collections import Counter
