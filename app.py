@@ -1,3 +1,4 @@
+
 import streamlit as st 
 import pandas as pd
 import re
@@ -43,8 +44,9 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
+# GÜNCELLENDİ: Kod başındaki sıfırları kaldıran normalize_code fonksiyonu
 def normalize_code(code):
-    return re.sub(r'[^A-Za-z0-9]', '', str(code))
+    return re.sub(r'^0+', '', re.sub(r'[^A-Za-z0-9]', '', str(code)))
 
 def normalize_name(name):
     name = str(name).lower()
