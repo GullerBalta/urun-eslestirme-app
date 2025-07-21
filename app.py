@@ -44,7 +44,7 @@ def clean_column_name(name):
     return name
 
 def normalize_code(code):
-    return re.sub(r'[^A-Za-z0-9]', '', str(code)).lstrip("0")  # Baştaki sıfırı temizle
+    return re.sub(r'[^A-Za-z0-9]', '', str(code)).lstrip("0")
 
 def normalize_name(name):
     name = str(name).lower()
@@ -104,20 +104,30 @@ def extract_items(xml_file, supplier_name=None):
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
             for kod in re.findall(r"\b[A-Za-z0-9\-\._]{5,20}\b", txt):
-                adi = txt.replace(kod, "").strip(" -:;:")
+                orj_kod = kod  # orijinal hali saklanır
                 if supplier_pattern:
-                    kod = re.sub(supplier_pattern.get("remove_prefix", "^$"), "", kod)
-                    kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
-                records.append({"kod": kod, "adi": adi, "orj_kod": kod})  # orj_kod ekle
+                    prefix_pattern = supplier_pattern.get("remove_prefix", "^$")
+                    suffix_pattern = supplier_pattern.get("remove_suffix", "$^")
+                    kod = re.sub(prefix_pattern, "", kod)
+                    kod = re.sub(suffix_pattern, "", kod)
+                adi = txt.replace(orj_kod, "").strip(" -:;:")
+                records.append({"kod": normalize_code(kod), "adi": adi, "orj_kod": orj_kod})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-supplier_name = st.text_input("🔖 Tedarikçi Adı (Şablon tanımlamak için)")
-prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
-suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
-
-if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
-    save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
-    st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
+def auto_detect_prefix_suffix(kod_listesi):
+    """
+    Basit frekans analizi ile otomatik prefix/suffix tahmini
+    """
+    from collections import Counter
+    prefixler = Counter()
+    suffixler = Counter()
+    for kod in kod_listesi:
+        if len(kod) > 6:
+            prefixler[kod[:2]] += 1
+            suffixler[kod[-2:]] += 1
+    tahmin_prefix = prefixler.most_common(1)[0][0] if prefixler else ""
+    tahmin_suffix = suffixler.most_common(1)[0][0] if suffixler else ""
+    return tahmin_prefix, tahmin_suffix
 
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
@@ -133,7 +143,16 @@ if u_order and u_invoice:
         st.subheader("🧾 Fatura Verileri (İlk 5000)")
         st.dataframe(df_fatura)
 
-        with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
+        if supplier_name and st.button("🤖 Tedarikçi Formatını Otomatik Öğren"):
+            prefix, suffix = auto_detect_prefix_suffix(df_fatura['kod'].tolist())
+            st.info(f"🔍 Otomatik Algılanan: Ön Ek = '{prefix}', Son Ek = '{suffix}'")
+            save_supplier_pattern(supplier_name, {
+                "remove_prefix": f"^{prefix}" if prefix else "^$",
+                "remove_suffix": f"{suffix}$" if suffix else "$^"
+            })
+            st.success(f"💾 '{supplier_name}' için tahmin edilen şablon kaydedildi.")
+
+                with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
@@ -200,5 +219,4 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📅 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
-
+        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
