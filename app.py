@@ -119,6 +119,15 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
+# 📂 Yeni Buton: Şablonları Göster
+if st.button("📂 Kayıtlı Tedarikçi Şablonlarını Göster"):
+    patterns = load_supplier_patterns()
+    if patterns:
+        st.subheader("📋 Kayıtlı Şablonlar")
+        st.json(patterns)
+    else:
+        st.info("🔍 Henüz kayıtlı bir şablon yok.")
+
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
@@ -198,4 +207,5 @@ if u_order and u_invoice:
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         dosya_adi = f"eslestirme_sonuclari_{supplier_name.strip().replace(' ', '_') or 'isimsiz'}.xlsx"
         st.download_button("📥 Excel İndir", data=excel_data, file_name=dosya_adi)
+
 
