@@ -152,7 +152,7 @@ if u_order and u_invoice:
             })
             st.success(f"💾 '{supplier_name}' için tahmin edilen şablon kaydedildi.")
 
-                with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
+            with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
