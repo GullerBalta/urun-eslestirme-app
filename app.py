@@ -1,4 +1,3 @@
-
 import streamlit as st 
 import pandas as pd
 import re
@@ -44,7 +43,7 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# GÜNCELLENDİ: Kod başındaki sıfırları kaldıran normalize_code fonksiyonu
+# Baştaki sıfırları temizleyip eşleştirme için normalize eden fonksiyon
 def normalize_code(code):
     return re.sub(r'^0+', '', re.sub(r'[^A-Za-z0-9]', '', str(code)))
 
@@ -60,9 +59,9 @@ def convert_to_xml(uploaded_file):
         if file_type == "xml":
             return uploaded_file
         elif file_type in ["csv", "txt"]:
-            df = pd.read_csv(uploaded_file)
+            df = pd.read_csv(uploaded_file, dtype=str)
         elif file_type in ["xls", "xlsx"]:
-            df = pd.read_excel(uploaded_file)
+            df = pd.read_excel(uploaded_file, dtype=str)
         else:
             st.error("❌ Desteklenmeyen dosya türü.")
             return None
