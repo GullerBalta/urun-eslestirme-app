@@ -153,7 +153,7 @@ if u_order and u_invoice:
 
         with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
-            siparis_kodlar = df_siparis["kod"].tolist()
+            siparis_kodlar = df_siparis["orj_kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
             orj_kodlar = df_siparis["orj_kod"].tolist()
 
