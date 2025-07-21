@@ -43,7 +43,6 @@ def clean_column_name(name):
     name = re.sub(r'[^\w\-\.]', '', name)
     return name
 
-# Baştaki sıfırları temizleyip eşleştirme için normalize eden fonksiyon
 def normalize_code(code):
     return re.sub(r'^0+', '', re.sub(r'[^A-Za-z0-9]', '', str(code)))
 
