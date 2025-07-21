@@ -1,3 +1,4 @@
+
 import streamlit as st 
 import pandas as pd
 import re
@@ -104,7 +105,7 @@ def extract_items(xml_file, supplier_name=None):
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
             for kod in re.findall(r"\b[A-Za-z0-9\-\._]{5,20}\b", txt):
-                orj_kod = kod  # orijinal hali saklanır
+                orj_kod = kod
                 if supplier_pattern:
                     prefix_pattern = supplier_pattern.get("remove_prefix", "^$")
                     suffix_pattern = supplier_pattern.get("remove_suffix", "$^")
@@ -115,9 +116,6 @@ def extract_items(xml_file, supplier_name=None):
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 def auto_detect_prefix_suffix(kod_listesi):
-    """
-    Basit frekans analizi ile otomatik prefix/suffix tahmini
-    """
     from collections import Counter
     prefixler = Counter()
     suffixler = Counter()
@@ -152,7 +150,7 @@ if u_order and u_invoice:
             })
             st.success(f"💾 '{supplier_name}' için tahmin edilen şablon kaydedildi.")
 
-            with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
+        with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
