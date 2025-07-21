@@ -104,15 +104,16 @@ def extract_items(xml_file, supplier_name=None):
     for elem in root.iter():
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
-            for kod in re.findall(r"\b[A-Za-z0-9\-\._]{5,20}\b", txt):
-                orj_kod = kod
+            for kod in re.findall(r"[A-Za-z0-9\-\._]{5,20}", txt):
+                orj_kod = kod.strip()
+                kod_normalized = normalize_code(orj_kod)
                 if supplier_pattern:
                     prefix_pattern = supplier_pattern.get("remove_prefix", "^$")
                     suffix_pattern = supplier_pattern.get("remove_suffix", "$^")
-                    kod = re.sub(prefix_pattern, "", kod)
-                    kod = re.sub(suffix_pattern, "", kod)
+                    kod_normalized = re.sub(prefix_pattern, "", kod_normalized)
+                    kod_normalized = re.sub(suffix_pattern, "", kod_normalized)
                 adi = txt.replace(orj_kod, "").strip(" -:;:")
-                records.append({"kod": orj_kod, "adi": adi, "orj_kod": orj_kod})
+                records.append({"kod": kod_normalized, "adi": adi, "orj_kod": orj_kod})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 def auto_detect_prefix_suffix(kod_listesi):
