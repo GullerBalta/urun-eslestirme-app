@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import re
 from rapidfuzz import process, fuzz
@@ -14,8 +14,8 @@ threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
-u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+u_order = st.file_uploader("📄 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+u_invoice = st.file_uploader("📄 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 
 def eslesme_seviyesi(puan):
     if puan >= 97:
@@ -44,7 +44,7 @@ def clean_column_name(name):
     return name
 
 def normalize_code(code):
-    return re.sub(r'[^A-Za-z0-9]', '', str(code))
+    return re.sub(r'[^A-Za-z0-9]', '', str(code)).lstrip("0")  # Baştaki sıfırı temizle
 
 def normalize_name(name):
     name = str(name).lower()
@@ -108,10 +108,10 @@ def extract_items(xml_file, supplier_name=None):
                 if supplier_pattern:
                     kod = re.sub(supplier_pattern.get("remove_prefix", "^$"), "", kod)
                     kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
-                records.append({"kod": kod, "adi": adi})
+                records.append({"kod": kod, "adi": adi, "orj_kod": kod})  # orj_kod ekle
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
+supplier_name = st.text_input("🔖 Tedarikçi Adı (Şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
 
@@ -137,6 +137,7 @@ if u_order and u_invoice:
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
+            orj_kodlar = df_siparis["orj_kod"].tolist()
 
             normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
             normalized_siparis_adlar = [normalize_name(ad) for ad in siparis_adlar]
@@ -159,7 +160,10 @@ if u_order and u_invoice:
                             idx = idx2
                             kod_score = combined_score
 
-                matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
+                matched = {
+                    "kod": orj_kodlar[idx],
+                    "adi": siparis_adlar[idx]
+                } if idx is not None else {"kod": "", "adi": ""}
                 durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
 
                 results.append({
@@ -196,4 +200,5 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        st.download_button("📥 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx") 
+        st.download_button("📅 Excel İndir", data=excel_data, file_name="eslestirme_sonuclari.xlsx")
+
