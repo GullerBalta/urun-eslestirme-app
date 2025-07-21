@@ -111,6 +111,7 @@ def extract_items(xml_file, supplier_name=None):
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
+# 🎯 Tedarikçi şablon tanımlama
 supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
 suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
@@ -119,15 +120,28 @@ if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
     save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
     st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
 
-# 📂 Yeni Buton: Şablonları Göster
-if st.button("📂 Kayıtlı Tedarikçi Şablonlarını Göster"):
+# 📂 Şablonları Göster/Gizle ve JSON İndir
+st.markdown("---")
+show_patterns = st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle")
+
+if show_patterns:
     patterns = load_supplier_patterns()
     if patterns:
         st.subheader("📋 Kayıtlı Şablonlar")
         st.json(patterns)
+
+        json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
+        json_bytes = BytesIO(json_str.encode("utf-8"))
+        st.download_button(
+            "📥 Şablonları JSON Olarak İndir",
+            data=json_bytes,
+            file_name="supplier_patterns.json",
+            mime="application/json"
+        )
     else:
         st.info("🔍 Henüz kayıtlı bir şablon yok.")
 
+# 🔄 Karşılaştırma işlemi
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
@@ -207,5 +221,3 @@ if u_order and u_invoice:
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         dosya_adi = f"eslestirme_sonuclari_{supplier_name.strip().replace(' ', '_') or 'isimsiz'}.xlsx"
         st.download_button("📥 Excel İndir", data=excel_data, file_name=dosya_adi)
-
-
