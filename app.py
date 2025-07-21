@@ -112,7 +112,7 @@ def extract_items(xml_file, supplier_name=None):
                     kod = re.sub(prefix_pattern, "", kod)
                     kod = re.sub(suffix_pattern, "", kod)
                 adi = txt.replace(orj_kod, "").strip(" -:;:")
-                records.append({"kod": normalize_code(kod), "adi": adi, "orj_kod": orj_kod})
+                records.append({"kod": orj_kod, "adi": adi, "orj_kod": orj_kod})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
 def auto_detect_prefix_suffix(kod_listesi):
