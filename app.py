@@ -1,4 +1,3 @@
-
 import streamlit as st 
 import pandas as pd
 import re
@@ -17,6 +16,7 @@ w_name = 1 - w_code
 
 u_order = st.file_uploader("📄 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📄 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
 
 def eslesme_seviyesi(puan):
     if puan >= 97:
