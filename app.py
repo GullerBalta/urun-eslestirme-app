@@ -10,7 +10,21 @@ import os
 st.set_page_config(layout="wide")
 st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
 
-# Kullanıcı Girişi
+# 🔐 Kayıtlı Şablonları Yükle/Kaydet
+def load_supplier_patterns():
+    if os.path.exists("supplier_patterns.json"):
+        with open("supplier_patterns.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_supplier_pattern(name, pattern):
+    patterns = load_supplier_patterns()
+    patterns[name] = pattern
+    with open("supplier_patterns.json", "w", encoding="utf-8") as f:
+        json.dump(patterns, f, indent=2, ensure_ascii=False)
+
+# Diğer yardımcı fonksiyonlar burada olacak (bir sonraki bölümde gelecek)
+# 🔐 Kullanıcı Girişi (Sadece tedarikçi şablonları için)
 if "giris_yapildi" not in st.session_state:
     st.session_state.giris_yapildi = False
 
@@ -25,69 +39,23 @@ if not st.session_state.giris_yapildi:
             else:
                 st.error("❌ Geçersiz kullanıcı adı veya şifre.")
 
+# 🎛️ Benzerlik Ayarları ve Dosya Yükleme
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
 w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
 w_name = 1 - w_code
 
 u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-
-supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
-
-if st.session_state.giris_yapildi:
-    prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
-    suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
-
-    if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
-        patterns = load_supplier_patterns()
-        patterns[supplier_name] = {"remove_prefix": prefix, "remove_suffix": suffix}
-        with open("supplier_patterns.json", "w", encoding="utf-8") as f:
-            json.dump(patterns, f, indent=2, ensure_ascii=False)
-        st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
-
-    if st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle"):
-        patterns = load_supplier_patterns()
-        if patterns:
-            st.subheader("📋 Kayıtlı Şablonlar")
-            st.json(patterns)
-            json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
-            json_bytes = BytesIO(json_str.encode("utf-8"))
-            st.download_button("📥 Şablonları JSON Olarak İndir", data=json_bytes, file_name="supplier_patterns.json", mime="application/json")
-        else:
-            st.info("🔍 Henüz kayıtlı bir şablon yok.")
-def eslesme_seviyesi(puan):
-    if puan >= 97:
-        return "🟢 Mükemmel"
-    elif puan >= 90:
-        return "🟡 Çok İyi"
-    elif puan >= 80:
-        return "🟠 İyi"
-    elif puan >= 65:
-        return "🔴 Zayıf"
-    else:
-        return "⚫ Farklı Ürün"
-
-def eslesmeme_seviyesi(puan):
-    if puan <= 20:
-        return "⚪ Şüpheli eşleşmeme, dikkatli kontrol"
-    elif puan <= 34:
-        return "🔵 Şüpheli, kontrol edilmeli"
-    else:
-        return "⚫ Muhtemelen farklı ürün"
+from io import BytesIO
+from lxml import etree
+import re
+import json
+import os
 
 def clean_column_name(name):
     name = name.strip()
     name = re.sub(r'\s+', '_', name)
     name = re.sub(r'[^\w\-\.]', '', name)
-    return name
-
-def normalize_code(code):
-    return re.sub(r'^0+', '', re.sub(r'[^A-Za-z0-9]', '', str(code)))
-
-def normalize_name(name):
-    name = str(name).lower()
-    name = re.sub(r'[^\w\s]', '', name)
-    name = re.sub(r'\s+', ' ', name).strip()
     return name
 
 def convert_to_xml(uploaded_file):
@@ -119,12 +87,20 @@ def convert_to_xml(uploaded_file):
         st.error(f"❌ XML'e dönüştürme hatası: {str(e)}")
         return None
 
+def normalize_code(code):
+    return re.sub(r'^0+', '', re.sub(r'[^A-Za-z0-9]', '', str(code)))
+
+def normalize_name(name):
+    name = str(name).lower()
+    name = re.sub(r'[^\w\s]', '', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
+
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
-
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -142,6 +118,27 @@ def extract_items(xml_file, supplier_name=None):
                     kod = re.sub(supplier_pattern.get("remove_suffix", "$^"), "", kod)
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
+
+def eslesme_seviyesi(puan):
+    if puan >= 97:
+        return "🟢 Mükemmel"
+    elif puan >= 90:
+        return "🟡 Çok İyi"
+    elif puan >= 80:
+        return "🟠 İyi"
+    elif puan >= 65:
+        return "🔴 Zayıf"
+    else:
+        return "⚫ Farklı Ürün"
+
+def eslesmeme_seviyesi(puan):
+    if puan <= 20:
+        return "⚪ Şüpheli eşleşmeme, dikkatli kontrol"
+    elif puan <= 34:
+        return "🔵 Şüpheli, kontrol edilmeli"
+    else:
+        return "⚫ Muhtemelen farklı ürün"
+
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
@@ -210,7 +207,6 @@ if u_order and u_invoice:
 
         st.subheader("❌ Eşleşmeyen Kayıtlar")
         st.dataframe(df_eslesmeyen)
-
         def to_excel(df1, df2):
             out = BytesIO()
             with pd.ExcelWriter(out, engine="openpyxl") as writer:
@@ -219,5 +215,11 @@ if u_order and u_invoice:
             return out.getvalue()
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
-        dosya_adi = f"eslestirme_sonuclari_{supplier_name.strip().replace(' ', '_') if supplier_name else 'cikti'}.xlsx"
-        st.download_button("📥 Excel İndir", data=excel_data, file_name=dosya_adi)
+
+        dosya_adi = f"eslestirme_sonuclari_{supplier_name.strip().replace(' ', '_') or 'isimsiz'}.xlsx"
+        st.download_button(
+            "📥 Excel İndir",
+            data=excel_data,
+            file_name=dosya_adi,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
