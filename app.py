@@ -6,12 +6,13 @@ from io import BytesIO
 from lxml import etree
 import json
 import os
+from streamlit.runtime.scriptrunner import rerun  # Çıkış sonrası sayfa yenileme
 
 # Sayfa ayarları
 st.set_page_config(layout="wide")
 st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
 
-# Oturum ve form durumları
+# Oturum ve form durumu
 if "giris_yapildi" not in st.session_state:
     st.session_state.giris_yapildi = False
 if "login_user" not in st.session_state:
@@ -21,7 +22,7 @@ if "login_pass" not in st.session_state:
 if "login_expanded" not in st.session_state:
     st.session_state.login_expanded = True
 
-# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana, otomatik sıfırlamalı)
+# 🔐 Giriş Paneli (Giriş ve Çıkış butonları)
 with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)", expanded=st.session_state.login_expanded):
     st.session_state.login_user = st.text_input("Kullanıcı Adı", value=st.session_state.login_user, key="login_user_input")
     st.session_state.login_pass = st.text_input("Şifre", value=st.session_state.login_pass, type="password", key="login_pass_input")
@@ -44,6 +45,7 @@ with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)", expanded=s
                 st.session_state.login_pass = ""
                 st.session_state.login_expanded = False
                 st.success("🚪 Başarıyla çıkış yaptınız.")
+                rerun()
 
 # 🔧 Parametreler
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
@@ -69,10 +71,10 @@ def normalize_name(name):
     name = re.sub(r'[^\w\s]', '', name)
     name = re.sub(r'\s+', ' ', name).strip()
     return name
-# 🔖 Tedarikçi Bilgisi ve Regex Girdileri (herkese açık)
-supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için veya yüklenen dosyaya özel işleme)", key="supplier_name")
-prefix = st.text_input("🔎 Ön Ek Kaldır (Regex)", "^XYZ", key="regex_prefix")
-suffix = st.text_input("🔍 Son Ek Kaldır (Regex)", "-TR$", key="regex_suffix")
+# 🔖 Tedarikçi ve regex alanları (herkese açık)
+supplier_name = st.text_input("🔖 Tedarikçi Adı", key="supplier_name")
+prefix = st.text_input("🔎 Ön Ek Kaldır (Regex)", "^SX:0+\\s*", key="regex_prefix")
+suffix = st.text_input("🔍 Son Ek Kaldır (Regex)", "", key="regex_suffix")
 
 # XML dönüştürme fonksiyonu
 def convert_to_xml(uploaded_file):
@@ -103,7 +105,7 @@ def convert_to_xml(uploaded_file):
         st.error(f"❌ XML'e dönüştürme hatası: {str(e)}")
         return None
 
-# Şablon işlemleri
+# Şablon fonksiyonları
 def load_supplier_patterns():
     if os.path.exists("supplier_patterns.json"):
         with open("supplier_patterns.json", "r", encoding="utf-8") as f:
@@ -116,31 +118,26 @@ def save_supplier_pattern(name, pattern):
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# 👤 Giriş yapmış kullanıcılar için şablon işlemleri
+# Şablon işlemleri (girişli kullanıcıya özel)
 if st.session_state.giris_yapildi:
     if st.button("💾 Bu tedarikçiye özel şablonu kaydet"):
         save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
         st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
-
     if st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle"):
         patterns = load_supplier_patterns()
         if patterns:
             st.subheader("📋 Kayıtlı Şablonlar")
             st.json(patterns)
-            json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
-            json_bytes = BytesIO(json_str.encode("utf-8"))
-            st.download_button("📥 Şablonları JSON Olarak İndir", data=json_bytes, file_name="supplier_patterns.json", mime="application/json")
         else:
             st.info("🔍 Henüz kayıtlı şablon yok.")
 
-# 🔍 XML'den veri çıkarma
+# XML'den veri çıkarma
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
     records = []
     patterns = load_supplier_patterns()
     supplier_pattern = patterns.get(supplier_name, {}) if supplier_name else {}
-
     for elem in root.iter():
         txt = (elem.text or "").strip()
         if re.search(r"[A-Za-z0-9]", txt) and len(txt) < 100:
@@ -217,32 +214,36 @@ if u_order and u_invoice:
                     "Fatura Adı": f_row["adi"],
                     "Sipariş Kodu": matched["kod"],
                     "Sipariş Adı": matched["adi"],
-                    "Eşleşme Oranı (%)": round(kod_score, 1),
+                    "Eşleşme Oran (%)": round(kod_score, 1),
                     "Durum": durum
                 })
 
-            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+        if results:
+            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oran (%)", ascending=False)
             df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy()
-            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
+            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oran (%)"].apply(eslesme_seviyesi)
 
             df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy()
-            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
+            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oran (%)"]
             df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
-            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
+            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oran (%)"])
 
-        st.success("✅ Eşleştirme tamamlandı!")
-        st.subheader("✅ Eşleşen Kayıtlar")
-        st.dataframe(df_eslesen)
+            st.success("✅ Eşleştirme tamamlandı!")
+            st.subheader("✅ Eşleşen Kayıtlar")
+            st.dataframe(df_eslesen)
 
-        st.subheader("❌ Eşleşmeyen Kayıtlar")
-        st.dataframe(df_eslesmeyen)
+            st.subheader("❌ Eşleşmeyen Kayıtlar")
+            st.dataframe(df_eslesmeyen)
 
-        def to_excel(df1, df2):
-            out = BytesIO()
-            with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                df1.to_excel(writer, sheet_name="Eslesen", index=False)
-                df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
-            return out.getvalue()
+            def to_excel(df1, df2):
+                out = BytesIO()
+                with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                    df1.to_excel(writer, sheet_name="Eslesen", index=False)
+                    df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
+                return out.getvalue()
 
-        dosya_adi = f"eslestirme_{supplier_name.strip().replace(' ', '_') or 'cikti'}.xlsx"
-        st.download_button("📥 Excel İndir", data=to_excel(df_eslesen, df_eslesmeyen), file_name=dosya_adi)
+            dosya_adi = f"eslestirme_{supplier_name.strip().replace(' ', '_') or 'cikti'}.xlsx"
+            st.download_button("📥 Excel İndir", data=to_excel(df_eslesen, df_eslesmeyen), file_name=dosya_adi)
+        else:
+            st.warning("⚠️ Hiçbir eşleşme bulunamadı. Regex veya eşik ayarlarını kontrol edin.")
+
