@@ -6,12 +6,13 @@ from io import BytesIO
 from lxml import etree
 import json
 import os
+from streamlit import experimental_rerun  # Çıkış sonrası sayfa yenileme
 
 # Sayfa ayarları
 st.set_page_config(layout="wide")
 st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme Sistemi")
 
-# Oturum ve form durumları
+# Oturum ve form durumu
 if "giris_yapildi" not in st.session_state:
     st.session_state.giris_yapildi = False
 if "login_user" not in st.session_state:
@@ -21,7 +22,7 @@ if "login_pass" not in st.session_state:
 if "login_expanded" not in st.session_state:
     st.session_state.login_expanded = True
 
-# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana, otomatik sıfırlamalı)
+# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana)
 with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)", expanded=st.session_state.login_expanded):
     st.session_state.login_user = st.text_input("Kullanıcı Adı", value=st.session_state.login_user, key="login_user_input")
     st.session_state.login_pass = st.text_input("Şifre", value=st.session_state.login_pass, type="password", key="login_pass_input")
@@ -44,6 +45,7 @@ with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)", expanded=s
                 st.session_state.login_pass = ""
                 st.session_state.login_expanded = False
                 st.success("🚪 Başarıyla çıkış yaptınız.")
+                experimental_rerun()
 
 # 🔧 Parametreler
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
@@ -133,7 +135,7 @@ if st.session_state.giris_yapildi:
         else:
             st.info("🔍 Henüz kayıtlı şablon yok.")
 
-# 🔍 XML'den veri çıkarma
+# XML'den veri çıkarma
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -175,7 +177,7 @@ def eslesmeme_seviyesi(puan):
     else:
         return "⚫ Muhtemelen farklı ürün"
 
-# 🧠 Eşleştirme işlemi
+# Eşleştirme işlemi
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
