@@ -224,3 +224,99 @@ def eslesmeme_seviyesi(puan):
         return "🔵 Şüpheli, kontrol edilmeli"
     else:
         return "⚫ Muhtemelen farklı ürün"
+# 🔖 Tedarikçi Adı ve Regex Girişleri (Artık herkese açık)
+supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
+prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
+suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
+
+# 🔐 Şablon kaydetme ve görüntüleme (Sadece giriş yapanlar için)
+if st.session_state.giris_yapildi:
+    if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
+        save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
+        st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
+
+    if st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle"):
+        patterns = load_supplier_patterns()
+        if patterns:
+            st.subheader("📋 Kayıtlı Şablonlar")
+            st.json(patterns)
+            json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
+            json_bytes = BytesIO(json_str.encode("utf-8"))
+            st.download_button("📥 Şablonları JSON Olarak İndir", data=json_bytes, file_name="supplier_patterns.json", mime="application/json")
+        else:
+            st.info("🔍 Henüz kayıtlı şablon yok.")
+
+# 🔍 Eşleştirme İşlemi
+if u_order and u_invoice:
+    converted_order = convert_to_xml(u_order)
+    converted_invoice = convert_to_xml(u_invoice)
+
+    if converted_order and converted_invoice:
+        df_siparis = extract_items(converted_order).head(5000)
+        df_fatura = extract_items(converted_invoice, supplier_name).head(5000)
+
+        st.subheader("📦 Sipariş Verileri (İlk 5000)")
+        st.dataframe(df_siparis)
+
+        st.subheader("🧾 Fatura Verileri (İlk 5000)")
+        st.dataframe(df_fatura)
+
+        with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
+            results = []
+            normalized_siparis_kodlar = [normalize_code(k) for k in df_siparis["kod"]]
+            normalized_siparis_adlar = [normalize_name(ad) for ad in df_siparis["adi"]]
+
+            for _, f_row in df_fatura.iterrows():
+                f_kod_norm = normalize_code(f_row["kod"])
+                kod_eslesme = process.extractOne(f_kod_norm, normalized_siparis_kodlar, scorer=fuzz.ratio)
+                kod_score, name_score, idx = 0, 0, None
+                if kod_eslesme:
+                    _, kod_score, idx = kod_eslesme
+                if f_row["adi"]:
+                    f_name_norm = normalize_name(f_row["adi"])
+                    name_eslesme = process.extractOne(f_name_norm, normalized_siparis_adlar, scorer=fuzz.partial_ratio)
+                    if name_eslesme:
+                        _, name_score, idx2 = name_eslesme
+                        combined = w_code * kod_score + w_name * name_score
+                        if combined > kod_score:
+                            kod_score = combined
+                            idx = idx2
+                matched = df_siparis.iloc[idx] if idx is not None else {"kod": "", "adi": ""}
+                durum = "EŞLEŞTİ" if kod_score >= threshold else "EŞLEŞMEDİ"
+                results.append({
+                    "Fatura Kodu": f_row["kod"],
+                    "Fatura Adı": f_row["adi"],
+                    "Sipariş Kodu": matched["kod"],
+                    "Sipariş Adı": matched["adi"],
+                    "Eşleşme Oranı (%)": round(kod_score, 1),
+                    "Durum": durum
+                })
+
+            df_result = pd.DataFrame(results)
+            if "Eşleşme Oranı (%)" in df_result.columns:
+                df_result = df_result.sort_values(by="Eşleşme Oranı (%)", ascending=False)
+
+            df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy()
+            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
+
+            df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy()
+            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
+            df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
+            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
+
+        st.success("✅ Eşleştirme tamamlandı!")
+        st.subheader("✅ Eşleşen Kayıtlar")
+        st.dataframe(df_eslesen)
+
+        st.subheader("❌ Eşleşmeyen Kayıtlar")
+        st.dataframe(df_eslesmeyen)
+
+        def to_excel(df1, df2):
+            out = BytesIO()
+            with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                df1.to_excel(writer, sheet_name="Eslesen", index=False)
+                df2.to_excel(writer, sheet_name="Eslesmeyen", index=False)
+            return out.getvalue()
+
+        dosya_adi = f"eslestirme_{supplier_name.strip().replace(' ', '_') or 'cikti'}.xlsx"
+        st.download_button("📥 Excel İndir", data=to_excel(df_eslesen, df_eslesmeyen), file_name=dosya_adi)
