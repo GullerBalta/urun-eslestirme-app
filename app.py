@@ -246,4 +246,3 @@ if u_order and u_invoice:
             st.download_button("📥 Excel İndir", data=to_excel(df_eslesen, df_eslesmeyen), file_name=dosya_adi)
         else:
             st.warning("⚠️ Hiçbir eşleşme bulunamadı. Regex veya eşik ayarlarını kontrol edin.")
-
