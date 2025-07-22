@@ -1,6 +1,3 @@
-# Bu dosya, kullanıcının verdiği kodun güncellenmiş ve giriş sistemli halidir.
-# Tüm özellikler entegre edilmiştir: giriş, admin kontrolü, eşleşme, şablon gösterimi, excel indirme vs.
-
 import streamlit as st
 import json
 import os
@@ -13,7 +10,7 @@ from lxml import etree
 st.set_page_config(layout="wide")
 st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Sistemi")
 
-# --- Kullanıcıları yükle ---
+# === Kullanıcı Yükleme ===
 def load_users():
     if os.path.exists("users.json"):
         with open("users.json", "r", encoding="utf-8") as f:
@@ -26,7 +23,7 @@ if "is_logged_in" not in st.session_state:
     st.session_state["is_logged_in"] = False
     st.session_state["username"] = None
 
-# --- Giriş Formu sadece şablonlar için ---
+# === Giriş Formu ===
 with st.expander("🔐 Giriş Yap (Tedarikçi Şablonlarını Görmek İçin)"):
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Kullanıcı Adı")
@@ -116,7 +113,46 @@ def save_supplier_pattern(name, pattern):
     patterns[name] = pattern
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
+# 🎯 Tedarikçi şablon tanımlama
+st.markdown("---")
+supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
+prefix = st.text_input("Ön Ek Kaldır (Regex)", "")
+suffix = st.text_input("Son Ek Kaldır (Regex)", "")
 
+if st.session_state["is_logged_in"]:
+    if st.button("💾 Bu tedarikçiye özel şablonu kaydet"):
+        save_supplier_pattern(supplier_name, {"remove_prefix": prefix or "^$", "remove_suffix": suffix or "$^"})
+        st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
+
+# 🔐 Kayıtlı şablonları sadece giriş yapan kullanıcılar görebilir
+if st.session_state["is_logged_in"]:
+    st.markdown("---")
+    show_patterns = st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle")
+    if show_patterns:
+        patterns = load_supplier_patterns()
+        if patterns:
+            st.subheader("📋 Kayıtlı Şablonlar")
+            st.json(patterns)
+
+            json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
+            json_bytes = BytesIO(json_str.encode("utf-8"))
+            st.download_button(
+                "📥 Şablonları JSON Olarak İndir",
+                data=json_bytes,
+                file_name="supplier_patterns.json",
+                mime="application/json"
+            )
+        else:
+            st.info("🔍 Henüz kayıtlı bir şablon yok.")
+
+# 🔧 Ayarlar
+threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
+w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
+w_name = 1 - w_code
+
+# 📤 Dosya yükleyiciler
+u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
+u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
 def extract_items(xml_file, supplier_name=None):
     tree = etree.parse(xml_file)
     root = tree.getroot()
@@ -135,47 +171,7 @@ def extract_items(xml_file, supplier_name=None):
                 records.append({"kod": kod, "adi": adi})
     return pd.DataFrame(records).drop_duplicates(subset=["kod", "adi"])
 
-# 🎯 Tedarikçi şablon tanımlama
-supplier_name = st.text_input("🔖 Tedarikçi Adı (şablon tanımlamak için)")
-prefix = st.text_input("Ön Ek Kaldır (Regex)", "^XYZ")
-suffix = st.text_input("Son Ek Kaldır (Regex)", "-TR$")
-
-if st.button("💡 Bu tedarikçiye özel şablonu kaydet"):
-    save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
-    st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
-
-# 📂 Şablonları Göster/Gizle ve JSON İndir
-st.markdown("---")
-show_patterns = st.checkbox("📂 Kayıtlı Tedarikçi Şablonlarını Göster / Gizle")
-
-if show_patterns:
-    if st.session_state["is_logged_in"]:
-        patterns = load_supplier_patterns()
-        if patterns:
-            st.subheader("📋 Kayıtlı Şablonlar")
-            st.json(patterns)
-
-            json_str = json.dumps(patterns, indent=2, ensure_ascii=False)
-            json_bytes = BytesIO(json_str.encode("utf-8"))
-            st.download_button(
-                "📥 Şablonları JSON Olarak İndir",
-                data=json_bytes,
-                file_name="supplier_patterns.json",
-                mime="application/json"
-            )
-        else:
-            st.info("🔍 Henüz kayıtlı bir şablon yok.")
-    else:
-        st.warning("🔒 Tedarikçi şablonlarını görmek için giriş yapmalısınız.")
-
-# === Karşılaştırma ===
-threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
-w_code = st.slider("📊 Ürün Kodu Ağırlığı (%)", 0, 100, 80) / 100.0
-w_name = 1 - w_code
-
-u_order = st.file_uploader("📤 Sipariş Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-u_invoice = st.file_uploader("📤 Fatura Dosyasını Yükleyin", type=["xml", "csv", "xls", "xlsx", "txt"])
-
+# 🔄 Karşılaştırma işlemi
 if u_order and u_invoice:
     converted_order = convert_to_xml(u_order)
     converted_invoice = convert_to_xml(u_invoice)
@@ -190,17 +186,17 @@ if u_order and u_invoice:
         st.subheader("🧾 Fatura Verileri (İlk 5000)")
         st.dataframe(df_fatura)
 
-        with st.spinner("🔄 Eşleştirme işlemi yapılıyor..."):
+        with st.spinner("🔍 Eşleştirme yapılıyor..."):
             results = []
             siparis_kodlar = df_siparis["kod"].tolist()
             siparis_adlar = df_siparis["adi"].tolist()
 
-            normalized_siparis_kodlar = [normalize_code(k) for k in siparis_kodlar]
-            normalized_siparis_adlar = [normalize_name(ad) for ad in siparis_adlar]
+            norm_kodlar = [normalize_code(k) for k in siparis_kodlar]
+            norm_adlar = [normalize_name(a) for a in siparis_adlar]
 
             for _, f_row in df_fatura.iterrows():
                 f_kod_norm = normalize_code(f_row["kod"])
-                kod_eslesme = process.extractOne(f_kod_norm, normalized_siparis_kodlar, scorer=fuzz.ratio)
+                kod_eslesme = process.extractOne(f_kod_norm, norm_kodlar, scorer=fuzz.ratio)
                 kod_score, name_score, idx = 0, 0, None
 
                 if kod_eslesme:
@@ -208,7 +204,7 @@ if u_order and u_invoice:
 
                 if f_row["adi"]:
                     f_name_norm = normalize_name(f_row["adi"])
-                    name_eslesme = process.extractOne(f_name_norm, normalized_siparis_adlar, scorer=fuzz.partial_ratio)
+                    name_eslesme = process.extractOne(f_name_norm, norm_adlar, scorer=fuzz.partial_ratio)
                     if name_eslesme:
                         _, name_score, idx2 = name_eslesme
                         combined_score = w_code * kod_score + w_name * name_score
@@ -228,15 +224,14 @@ if u_order and u_invoice:
                     "Durum": durum
                 })
 
-            df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+        df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+        df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].reset_index(drop=True)
+        df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
 
-            df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy().reset_index(drop=True)
-            df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
-
-            df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].copy().reset_index(drop=True)
-            df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
-            df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
-            df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
+        df_eslesmeyen = df_result[df_result["Durum"] == "EŞLEŞMEDİ"].reset_index(drop=True)
+        df_eslesmeyen["Eşleşmeme Oranı (%)"] = 100 - df_eslesmeyen["Eşleşme Oranı (%)"]
+        df_eslesmeyen["Seviye"] = df_eslesmeyen["Eşleşmeme Oranı (%)"].apply(eslesmeme_seviyesi)
+        df_eslesmeyen = df_eslesmeyen.drop(columns=["Eşleşme Oranı (%)"])
 
         st.success("✅ Eşleştirme tamamlandı!")
         st.subheader("✅ Eşleşen Kayıtlar")
@@ -244,7 +239,6 @@ if u_order and u_invoice:
 
         st.subheader("❌ Eşleşmeyen Kayıtlar")
         st.dataframe(df_eslesmeyen)
-
         def to_excel(df1, df2):
             out = BytesIO()
             with pd.ExcelWriter(out, engine="openpyxl") as writer:
@@ -254,4 +248,10 @@ if u_order and u_invoice:
 
         excel_data = to_excel(df_eslesen, df_eslesmeyen)
         dosya_adi = f"eslestirme_sonuclari_{supplier_name.strip().replace(' ', '_') or 'isimsiz'}.xlsx"
-        st.download_button("📥 Excel İndir", data=excel_data, file_name=dosya_adi)
+
+        st.download_button(
+            label="📥 Excel İndir",
+            data=excel_data,
+            file_name=dosya_adi,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
