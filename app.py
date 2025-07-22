@@ -195,8 +195,12 @@ if u_order and u_invoice:
                     "Eşleşme Oranı (%)": round(kod_score, 1),
                     "Durum": durum
                 })
-
+                
+            if results and "Eşleşme Oranı (%)" in results[0]:
             df_result = pd.DataFrame(results).sort_values(by="Eşleşme Oranı (%)", ascending=False)
+            else:
+            df_result = pd.DataFrame(results)
+
             df_eslesen = df_result[df_result["Durum"] == "EŞLEŞTİ"].copy()
             df_eslesen["Seviye"] = df_eslesen["Eşleşme Oranı (%)"].apply(eslesme_seviyesi)
 
