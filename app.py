@@ -97,8 +97,13 @@ def save_supplier_pattern(name, pattern):
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# 👤 Giriş yapmış kullanıcılar için şablon kaydetme/görüntüleme
+# 👤 Giriş yapmış kullanıcılar için şablon kaydetme/görüntüleme ve çıkış
 if st.session_state.giris_yapildi:
+
+    if st.button("🚪 Çıkış Yap"):
+        st.session_state.giris_yapildi = False
+        st.success("🚪 Başarıyla çıkış yaptınız.")
+
     if st.button("💾 Bu tedarikçiye özel şablonu kaydet"):
         save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
         st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
