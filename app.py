@@ -98,11 +98,27 @@ def save_supplier_pattern(name, pattern):
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
 # 👤 Giriş yapmış kullanıcılar için şablon kaydetme/görüntüleme ve çıkış
-if st.session_state.giris_yapildi:
+# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana)
+with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)"):
+    username = st.text_input("Kullanıcı Adı", key="login_user")
+    password = st.text_input("Şifre", type="password", key="login_pass")
+    
+    col1, col2 = st.columns([1, 1])  # 2 sütun yan yana
 
-    if st.button("🚪 Çıkış Yap"):
-        st.session_state.giris_yapildi = False
-        st.success("🚪 Başarıyla çıkış yaptınız.")
+    with col1:
+        if st.button("Giriş", key="login_button"):
+            if username == "guller" and password == "abc123":
+                st.session_state.giris_yapildi = True
+                st.success("✅ Giriş başarılı!")
+            else:
+                st.error("❌ Geçersiz kullanıcı adı veya şifre.")
+    
+    with col2:
+        if st.session_state.giris_yapildi:
+            if st.button("Çıkış Yap", key="logout_button"):
+                st.session_state.giris_yapildi = False
+                st.success("🚪 Başarıyla çıkış yaptınız.")
+
 
     if st.button("💾 Bu tedarikçiye özel şablonu kaydet"):
         save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
