@@ -15,16 +15,24 @@ st.title("📦 Akıllı Sipariş | Fatura Karşılaştırma ve Tedarikçi Ekleme
 if "giris_yapildi" not in st.session_state:
     st.session_state.giris_yapildi = False
 
-# 🔐 Giriş Paneli
+# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana)
 with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)"):
     username = st.text_input("Kullanıcı Adı", key="login_user")
     password = st.text_input("Şifre", type="password", key="login_pass")
-    if st.button("Giriş", key="login_button"):
-        if username == "guller" and password == "abc123":
-            st.session_state.giris_yapildi = True
-            st.success("✅ Giriş başarılı!")
-        else:
-            st.error("❌ Geçersiz kullanıcı adı veya şifre.")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Giriş", key="login_button"):
+            if username == "guller" and password == "abc123":
+                st.session_state.giris_yapildi = True
+                st.success("✅ Giriş başarılı!")
+            else:
+                st.error("❌ Geçersiz kullanıcı adı veya şifre.")
+    with col2:
+        if st.session_state.giris_yapildi:
+            if st.button("Çıkış Yap", key="logout_button"):
+                st.session_state.giris_yapildi = False
+                st.success("🚪 Başarıyla çıkış yaptınız.")
 
 # 🔧 Parametreler
 threshold = st.slider("🔧 Benzerlik Eşiği (%)", 50, 100, 90)
@@ -97,29 +105,8 @@ def save_supplier_pattern(name, pattern):
     with open("supplier_patterns.json", "w", encoding="utf-8") as f:
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
-# 👤 Giriş yapmış kullanıcılar için şablon kaydetme/görüntüleme ve çıkış
-# 🔐 Giriş Paneli (Giriş ve Çıkış butonları yan yana)
-with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)"):
-    username = st.text_input("Kullanıcı Adı", key="login_user")
-    password = st.text_input("Şifre", type="password", key="login_pass")
-    
-    col1, col2 = st.columns([1, 1])  # 2 sütun yan yana
-
-    with col1:
-        if st.button("Giriş", key="login_button"):
-            if username == "guller" and password == "abc123":
-                st.session_state.giris_yapildi = True
-                st.success("✅ Giriş başarılı!")
-            else:
-                st.error("❌ Geçersiz kullanıcı adı veya şifre.")
-    
-    with col2:
-        if st.session_state.giris_yapildi:
-            if st.button("Çıkış Yap", key="logout_button"):
-                st.session_state.giris_yapildi = False
-                st.success("🚪 Başarıyla çıkış yaptınız.")
-
-
+# 👤 Giriş yapmış kullanıcılar için şablon kaydetme/görüntüleme
+if st.session_state.giris_yapildi:
     if st.button("💾 Bu tedarikçiye özel şablonu kaydet"):
         save_supplier_pattern(supplier_name, {"remove_prefix": prefix, "remove_suffix": suffix})
         st.success(f"✅ '{supplier_name}' için şablon kaydedildi.")
