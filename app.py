@@ -22,6 +22,12 @@ with st.expander("🔐 Giriş Yap (Sadece şablon işlemleri için)"):
         if username == "guller" and password == "abc123":
             st.session_state.giris_yapildi = True
             st.success("✅ Giriş başarılı!")
+        elif username == "admin" and password == "12345":
+            st.session_state.giris_yapildi = True
+            st.success("✅ Giriş başarılı!")
+        elif username == "admin2" and password == "123456":
+            st.session_state.giris_yapildi = True
+            st.success("✅ Giriş başarılı!")
         else:
             st.error("❌ Geçersiz kullanıcı adı veya şifre.")
 
